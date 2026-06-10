@@ -6,7 +6,7 @@ export function downloadCsv(
 ): void {
   const escape = (v: string | number | null | undefined): string => {
     const s = v == null ? "" : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const csv = [headers, ...rows].map((row) => row.map(escape).join(",")).join("\n");
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });

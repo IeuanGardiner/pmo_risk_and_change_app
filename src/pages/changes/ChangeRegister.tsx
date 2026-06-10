@@ -2,49 +2,80 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Download, Plus } from "lucide-react";
 import {
-  Btn, Card, ChangeStatusPill, EmptyState, PageHeader, PriorityText, Select,
+  Btn, Card, ChangeStatusPill, EmptyState, PageHeader, Pagination, PriorityText, Select, SortableTh,
 } from "../../components/ui";
+import { usePageTitle } from "../../hooks/usePageTitle";
+import { useSortPage, type SortState } from "../../hooks/useSortPage";
 import { useAppData } from "../../store/AppData";
 import { CHANGE_STATUS_STYLES, T } from "../../theme/tokens";
-import type { ChangeStatus, Scope } from "../../types/domain";
+import type { ChangeRequest, ChangeStatus, Scope } from "../../types/domain";
 import { CHANGE_PRIORITIES, CHANGE_STATUSES } from "../../types/lookups";
 import { downloadCsv } from "../../utils/csv";
-import { formatDate, gbp, scheduleDays } from "../../utils/format";
+import { formatDate, money, scheduleDays } from "../../utils/format";
 
 type StatusTab = "All" | ChangeStatus;
 const TABS: StatusTab[] = ["All", ...CHANGE_STATUSES];
 
+const ACCESSORS = {
+  ref: (c: ChangeRequest) => c.changeReference,
+  title: (c: ChangeRequest) => c.title,
+  category: (c: ChangeRequest) => c.category,
+  priority: (c: ChangeRequest) => CHANGE_PRIORITIES.indexOf(c.priority),
+  cost: (c: ChangeRequest) => c.costImpact,
+  schedule: (c: ChangeRequest) => c.scheduleImpactDays,
+  owner: (c: ChangeRequest) => c.owner,
+  requiredBy: (c: ChangeRequest) => c.requiredBy,
+  status: (c: ChangeRequest) => c.status,
+  updated: (c: ChangeRequest) => c.updatedAt,
+} satisfies Record<string, (c: ChangeRequest) => string | number | null>;
+type SortKey = keyof typeof ACCESSORS;
+const INITIAL_SORT: SortState<SortKey> = { key: "updated", dir: "desc" };
+
 export function ChangeRegister() {
-  const { changes, projects } = useAppData();
+  const { changes, activeProjects } = useAppData();
   const navigate = useNavigate();
+  usePageTitle("Change Register");
   const [scope, setScope] = useState<Scope>("Project");
   const [tab, setTab] = useState<StatusTab>("All");
   const [priority, setPriority] = useState("");
 
   const inScope = useMemo(() => changes.filter((c) => c.scope === scope), [changes, scope]);
-  const rows = useMemo(
+  const filtered = useMemo(
     () =>
       inScope
         .filter((c) => tab === "All" || c.status === tab)
-        .filter((c) => !priority || c.priority === priority)
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+        .filter((c) => !priority || c.priority === priority),
     [inScope, tab, priority],
   );
+
+  const { sorted, pageRows, sort, toggleSort, page, setPage, pageCount, pageSize, total } =
+    useSortPage({ rows: filtered, accessors: ACCESSORS, initialSort: INITIAL_SORT });
+
   const tabCount = (t: StatusTab) => inScope.filter((c) => t === "All" || c.status === t).length;
 
-  const projectName = (id: string | null) => projects.find((p) => p.id === id)?.code ?? "—";
+  const projectName = (id: string | null) => activeProjects.find((p) => p.id === id)?.code ?? "—";
 
   const exportCsv = () =>
     downloadCsv(
       `change-register-${scope.toLowerCase()}.csv`,
-      ["Reference", "Title", "Scope", "Category", "Priority", "Status", "Raised By", "Owner", "Cost Impact £", "Schedule Days", "Required By", "Project", "Linked Risks"],
-      rows.map((c) => [
+      ["Reference", "Title", "Scope", "Category", "Priority", "Status", "Raised By", "Owner", "Cost Impact", "Schedule Days", "Required By", "Project", "Profile Start", "Profile Months", "Linked Risks"],
+      sorted.map((c) => [
         c.changeReference, c.title, c.scope, c.category, c.priority, c.status, c.raisedBy, c.owner,
         c.costImpact, c.scheduleImpactDays, c.requiredBy ?? "",
-        scope === "Project" ? projectName(c.projectId) : c.regulatoryPeriod,
+        scope === "Project" ? projectName(c.projectId) : "",
+        c.costProfile.startMonth, c.costProfile.periods.length,
         c.linkedRiskRefs.join("; "),
       ]),
     );
+
+  const sortable = (key: SortKey, label: string) => (
+    <SortableTh
+      label={label}
+      active={sort.key === key}
+      dir={sort.dir}
+      onClick={() => toggleSort(key)}
+    />
+  );
 
   return (
     <div style={{ padding: 24, overflow: "auto" }}>
@@ -65,7 +96,7 @@ export function ChangeRegister() {
       {/* Scope toggle */}
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
         {(["Project", "Program"] as Scope[]).map((s) => (
-          <div
+          <button
             key={s}
             onClick={() => {
               setScope(s);
@@ -76,6 +107,7 @@ export function ChangeRegister() {
               borderRadius: 6,
               fontSize: 13,
               fontWeight: 600,
+              fontFamily: T.font,
               cursor: "pointer",
               background: scope === s ? T.sidebar : T.surface,
               color: scope === s ? "#fff" : T.textSec,
@@ -83,7 +115,7 @@ export function ChangeRegister() {
             }}
           >
             {s} Changes
-          </div>
+          </button>
         ))}
       </div>
 
@@ -99,7 +131,7 @@ export function ChangeRegister() {
           }}
         >
           {TABS.map((t) => (
-            <div
+            <button
               key={t}
               onClick={() => setTab(t)}
               style={{
@@ -107,6 +139,8 @@ export function ChangeRegister() {
                 borderRadius: 16,
                 fontSize: 12.5,
                 fontWeight: 600,
+                fontFamily: T.font,
+                border: "none",
                 cursor: "pointer",
                 color: tab === t ? "#fff" : T.textSec,
                 background:
@@ -114,7 +148,7 @@ export function ChangeRegister() {
               }}
             >
               {t} ({tabCount(t)})
-            </div>
+            </button>
           ))}
           <div style={{ marginLeft: "auto", width: 160 }}>
             <Select
@@ -137,15 +171,23 @@ export function ChangeRegister() {
                 background: T.bg,
               }}
             >
-              {["#", "Change", "Category", "Priority", "Cost Impact", "Schedule", "Owner", "Required By", "Status", scope === "Project" ? "Project" : "Period", ""].map((h, i) => (
-                <th key={i} style={{ padding: "10px 14px", fontWeight: 600 }}>
-                  {h}
-                </th>
-              ))}
+              {sortable("ref", "#")}
+              {sortable("title", "Change")}
+              {sortable("category", "Category")}
+              {sortable("priority", "Priority")}
+              {sortable("cost", "Cost Impact")}
+              {sortable("schedule", "Schedule")}
+              {sortable("owner", "Owner")}
+              {sortable("requiredBy", "Required By")}
+              {sortable("status", "Status")}
+              {scope === "Project" && (
+                <th style={{ padding: "10px 14px", fontWeight: 600 }}>Project</th>
+              )}
+              <th style={{ padding: "10px 14px" }} />
             </tr>
           </thead>
           <tbody>
-            {rows.map((c) => (
+            {pageRows.map((c) => (
               <tr
                 key={c.changeReference}
                 className="rs-row"
@@ -172,7 +214,7 @@ export function ChangeRegister() {
                     color: c.costImpact < 0 ? T.low : T.text,
                   }}
                 >
-                  {gbp(c.costImpact)}
+                  {money(c.costImpact)}
                 </td>
                 <td style={{ padding: "11px 14px", color: T.textSec }}>
                   {scheduleDays(c.scheduleImpactDays)}
@@ -182,9 +224,11 @@ export function ChangeRegister() {
                 <td style={{ padding: "11px 14px" }}>
                   <ChangeStatusPill status={c.status} small />
                 </td>
-                <td style={{ padding: "11px 14px", color: T.textSec, fontWeight: 600 }}>
-                  {scope === "Project" ? projectName(c.projectId) : c.regulatoryPeriod}
-                </td>
+                {scope === "Project" && (
+                  <td style={{ padding: "11px 14px", color: T.textSec, fontWeight: 600 }}>
+                    {projectName(c.projectId)}
+                  </td>
+                )}
                 <td style={{ padding: "11px 14px", color: T.brand }}>
                   <ArrowRight size={16} />
                 </td>
@@ -192,7 +236,14 @@ export function ChangeRegister() {
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && <EmptyState>No change requests match the current filters.</EmptyState>}
+        {total === 0 && <EmptyState>No change requests match the current filters.</EmptyState>}
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          total={total}
+          pageSize={pageSize}
+          onPage={setPage}
+        />
       </Card>
     </div>
   );

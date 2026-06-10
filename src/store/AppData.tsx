@@ -8,16 +8,19 @@ import {
   type ReactNode,
 } from "react";
 import { services } from "../api";
+import type { AppConfig } from "../types/config";
+import { DEFAULT_CONFIG } from "../types/config";
 import type {
   AppUser,
   ChangeInput,
   ChangeRequest,
   ChangeTransitionAction,
   Project,
-  RegulatoryPeriod,
+  ProjectInput,
   Risk,
   RiskInput,
 } from "../types/domain";
+import { setCurrency } from "../utils/format";
 
 /* ============================================================================
    AppData — single client-side cache over the service layer. Every mutation
@@ -28,15 +31,21 @@ import type {
 interface AppDataValue {
   loading: boolean;
   error: string | null;
+  /** All risks, including archived. Prefer `activeRisks` for dashboards/forms. */
   risks: Risk[];
+  activeRisks: Risk[];
   changes: ChangeRequest[];
+  /** All projects, including archived. Prefer `activeProjects` for pickers. */
   projects: Project[];
-  periods: RegulatoryPeriod[];
+  activeProjects: Project[];
+  config: AppConfig;
   user: AppUser | null;
   refresh: () => Promise<void>;
   createRisk: (input: RiskInput) => Promise<Risk>;
   updateRisk: (ref: string, patch: Partial<RiskInput>) => Promise<Risk>;
   closeRisk: (ref: string) => Promise<Risk>;
+  archiveRisk: (ref: string) => Promise<Risk>;
+  restoreRisk: (ref: string) => Promise<Risk>;
   createChange: (input: ChangeInput) => Promise<ChangeRequest>;
   updateChange: (ref: string, patch: Partial<ChangeInput>) => Promise<ChangeRequest>;
   transitionChange: (
@@ -44,6 +53,12 @@ interface AppDataValue {
     action: ChangeTransitionAction,
     note?: string,
   ) => Promise<ChangeRequest>;
+  deleteChange: (ref: string) => Promise<void>;
+  updateConfig: (next: AppConfig) => Promise<AppConfig>;
+  createProject: (input: ProjectInput) => Promise<Project>;
+  updateProject: (id: string, patch: Partial<ProjectInput>) => Promise<Project>;
+  archiveProject: (id: string) => Promise<Project>;
+  restoreProject: (id: string) => Promise<Project>;
 }
 
 const AppDataContext = createContext<AppDataValue | null>(null);
@@ -54,23 +69,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [risks, setRisks] = useState<Risk[]>([]);
   const [changes, setChanges] = useState<ChangeRequest[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [periods, setPeriods] = useState<RegulatoryPeriod[]>([]);
+  const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [user, setUser] = useState<AppUser | null>(null);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     setError(null);
     try {
-      const [riskList, changeList, projectList, periodList, currentUser] = await Promise.all([
+      const [riskList, changeList, projectList, cfg, currentUser] = await Promise.all([
         services.risks.list(),
         services.changes.list(),
-        services.reference.projects(),
-        services.reference.regulatoryPeriods(),
+        services.projects.list(),
+        services.config.get(),
         services.reference.currentUser(),
       ]);
+      setCurrency(cfg.currency);
       setRisks(riskList);
       setChanges(changeList);
       setProjects(projectList);
-      setPeriods(periodList);
+      setConfig(cfg);
       setUser(currentUser);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data");
@@ -99,17 +116,28 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         : [...prev, rec];
     });
 
+  const upsertProject = (rec: Project) =>
+    setProjects((prev) => {
+      const exists = prev.some((p) => p.id === rec.id);
+      return exists ? prev.map((p) => (p.id === rec.id ? rec : p)) : [...prev, rec];
+    });
+
   /** Risk↔change links are bidirectional; refetch risks so both sides agree. */
   const refreshRisks = async () => setRisks(await services.risks.list());
+
+  const activeRisks = useMemo(() => risks.filter((r) => !r.archived), [risks]);
+  const activeProjects = useMemo(() => projects.filter((p) => !p.archived), [projects]);
 
   const value = useMemo<AppDataValue>(
     () => ({
       loading,
       error,
       risks,
+      activeRisks,
       changes,
       projects,
-      periods,
+      activeProjects,
+      config,
       user,
       refresh,
       createRisk: async (input) => {
@@ -124,6 +152,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       },
       closeRisk: async (ref) => {
         const rec = await services.risks.close(ref);
+        upsertRisk(rec);
+        return rec;
+      },
+      archiveRisk: async (ref) => {
+        const rec = await services.risks.archive(ref);
+        upsertRisk(rec);
+        return rec;
+      },
+      restoreRisk: async (ref) => {
+        const rec = await services.risks.restore(ref);
         upsertRisk(rec);
         return rec;
       },
@@ -144,8 +182,42 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         upsertChange(rec);
         return rec;
       },
+      deleteChange: async (ref) => {
+        const hadLinks = changes.find((c) => c.changeReference === ref)?.linkedRiskRefs.length;
+        await services.changes.delete(ref);
+        setChanges((prev) => prev.filter((c) => c.changeReference !== ref));
+        if (hadLinks) await refreshRisks();
+      },
+      updateConfig: async (next) => {
+        const cfg = await services.config.update(next);
+        setCurrency(cfg.currency);
+        setConfig(cfg);
+        // A matrix change re-bands every stored risk server-side — refetch.
+        await refreshRisks();
+        return cfg;
+      },
+      createProject: async (input) => {
+        const rec = await services.projects.create(input);
+        upsertProject(rec);
+        return rec;
+      },
+      updateProject: async (id, patch) => {
+        const rec = await services.projects.update(id, patch);
+        upsertProject(rec);
+        return rec;
+      },
+      archiveProject: async (id) => {
+        const rec = await services.projects.archive(id);
+        upsertProject(rec);
+        return rec;
+      },
+      restoreProject: async (id) => {
+        const rec = await services.projects.restore(id);
+        upsertProject(rec);
+        return rec;
+      },
     }),
-    [loading, error, risks, changes, projects, periods, user, refresh],
+    [loading, error, risks, activeRisks, changes, projects, activeProjects, config, user, refresh],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

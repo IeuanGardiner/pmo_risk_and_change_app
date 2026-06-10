@@ -5,44 +5,45 @@ import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import {
-  Btn, Card, ChangeStatusPill, PageHeader, PriorityText, SectionTitle,
+  Btn, Card, ChangeStatusPill, EmptyState, PageHeader, PriorityText, SectionTitle,
 } from "../../components/ui";
+import { usePageTitle } from "../../hooks/usePageTitle";
 import { useAppData } from "../../store/AppData";
 import { CHANGE_STATUS_STYLES, T } from "../../theme/tokens";
 import type { ChangeRequest } from "../../types/domain";
 import { CHANGE_STATUSES } from "../../types/lookups";
 import { costByCategory, countByMonth } from "../../utils/chartData";
-import { formatDateTime, gbp, scheduleDays } from "../../utils/format";
+import { currencySymbol, formatDateTime, money, scheduleDays } from "../../utils/format";
 
 export function ChangeDashboard() {
   const { changes } = useAppData();
   const navigate = useNavigate();
+  usePageTitle("Change Dashboard");
 
   const lastUpdated = changes.reduce((a, c) => (c.updatedAt > a ? c.updatedAt : a), "");
-  const byStatus = (s: string) => changes.filter((c) => c.status === s).length;
 
-  const kpis = [
-    { label: "Total Changes", n: changes.length, sub: "All change requests", c: T.brand },
-    {
-      label: "Pending Approval",
-      n: byStatus("Submitted") + byStatus("Under Review"),
-      sub: "Submitted / in review",
-      c: T.purple,
-    },
-    { label: "Approved", n: byStatus("Approved"), sub: "Awaiting implementation", c: T.low },
-    { label: "Implemented", n: byStatus("Implemented"), sub: "Delivered changes", c: T.teal },
-    { label: "Rejected", n: byStatus("Rejected"), sub: "Not progressed", c: T.critical },
-  ];
-
-  const pipeline = useMemo(
-    () =>
-      CHANGE_STATUSES.map((s) => ({
+  const { kpis, pipeline } = useMemo(() => {
+    const byStatus = (s: string) => changes.filter((c) => c.status === s).length;
+    return {
+      kpis: [
+        { label: "Total Changes", n: changes.length, sub: "All change requests", c: T.brand },
+        {
+          label: "Pending Approval",
+          n: byStatus("Submitted") + byStatus("Under Review"),
+          sub: "Submitted / in review",
+          c: T.purple,
+        },
+        { label: "Approved", n: byStatus("Approved"), sub: "Awaiting implementation", c: T.low },
+        { label: "Implemented", n: byStatus("Implemented"), sub: "Delivered changes", c: T.teal },
+        { label: "Rejected", n: byStatus("Rejected"), sub: "Not progressed", c: T.critical },
+      ],
+      pipeline: CHANGE_STATUSES.map((s) => ({
         name: s,
         value: byStatus(s),
         fill: CHANGE_STATUS_STYLES[s].c,
       })),
-    [changes], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+    };
+  }, [changes]);
 
   const approvedCost = changes
     .filter((c) => c.status === "Approved" || c.status === "Implemented")
@@ -60,6 +61,25 @@ export function ChangeDashboard() {
     () => [...changes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 6),
     [changes],
   );
+
+  if (changes.length === 0) {
+    return (
+      <div style={{ padding: 24 }}>
+        <PageHeader title="Change Dashboard" />
+        <Card>
+          <EmptyState
+            action={
+              <Btn variant="dark" icon={Plus} onClick={() => navigate("/changes/new")}>
+                Raise Change
+              </Btn>
+            }
+          >
+            No change requests raised yet — raise the first change to populate the dashboard.
+          </EmptyState>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 24, overflow: "auto" }}>
@@ -128,8 +148,8 @@ export function ChangeDashboard() {
             style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 8 }}
           >
             {[
-              { l: "Approved Cost Impact", v: gbp(approvedCost), c: T.low, s: "Approved + implemented" },
-              { l: "Pending Cost Impact", v: gbp(pendingCost), c: T.purple, s: "Awaiting decision" },
+              { l: "Approved Cost Impact", v: money(approvedCost), c: T.low, s: "Approved + implemented" },
+              { l: "Pending Cost Impact", v: money(pendingCost), c: T.purple, s: "Awaiting decision" },
               { l: "Net Schedule Impact", v: scheduleDays(netSchedule), c: T.high, s: "Active changes, days" },
             ].map((x) => (
               <div
@@ -143,14 +163,14 @@ export function ChangeDashboard() {
             ))}
           </div>
           <div style={{ fontSize: 12, color: T.textSec, fontWeight: 600, margin: "4px 0" }}>
-            Cost impact by category (£)
+            Cost impact by category ({currencySymbol()})
           </div>
           <ResponsiveContainer width="100%" height={190}>
             <BarChart data={byCat}>
               <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => gbp(v)} />
-              <Tooltip formatter={(v: number) => gbp(v)} />
+              <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => money(v)} />
+              <Tooltip formatter={(v: number) => money(v)} />
               <Bar dataKey="value" name="Cost impact" radius={[3, 3, 0, 0]} barSize={26}>
                 {byCat.map((e, i) => (
                   <Cell key={i} fill={e.value < 0 ? T.low : T.brand} />
@@ -215,7 +235,7 @@ function RecentTable({
               <PriorityText priority={c.priority} />
             </td>
             <td style={{ padding: "9px 8px", color: c.costImpact < 0 ? T.low : T.text, fontWeight: 600 }}>
-              {gbp(c.costImpact)}
+              {money(c.costImpact)}
             </td>
             <td style={{ padding: "9px 8px", color: T.textSec }}>{scheduleDays(c.scheduleImpactDays)}</td>
             <td style={{ padding: "9px 8px" }}>

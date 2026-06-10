@@ -1,25 +1,29 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { RiskMatrix } from "../../components/RiskMatrix";
-import { Btn, Card, PageHeader, Pill, RiskStatusText, SectionTitle } from "../../components/ui";
+import {
+  Btn, Card, EmptyState, PageHeader, Pill, RiskStatusText, SectionTitle,
+} from "../../components/ui";
+import { usePageTitle } from "../../hooks/usePageTitle";
 import { useAppData } from "../../store/AppData";
 import { CHART_COLORS, LEVEL_STYLES, T } from "../../theme/tokens";
 import type { Risk } from "../../types/domain";
 import { RISK_LEVELS } from "../../types/lookups";
 import { countByCategory, countByMonth, drawdownSeries } from "../../utils/chartData";
-import { formatDateTime, gbp } from "../../utils/format";
+import { currencySymbol, formatDate, formatDateTime, isOverdue, money } from "../../utils/format";
 
 export function RiskDashboard() {
-  const { risks } = useAppData();
+  const { activeRisks, config } = useAppData();
   const navigate = useNavigate();
+  usePageTitle("Risk Dashboard");
 
-  const open = useMemo(() => risks.filter((r) => r.status !== "Closed"), [risks]);
-  const lastUpdated = risks.reduce((a, r) => (r.updatedAt > a ? r.updatedAt : a), "");
+  const open = useMemo(() => activeRisks.filter((r) => r.status !== "Closed"), [activeRisks]);
+  const lastUpdated = activeRisks.reduce((a, r) => (r.updatedAt > a ? r.updatedAt : a), "");
 
   const kpis = useMemo(() => {
     const subs: Record<string, string> = {
@@ -39,9 +43,9 @@ export function RiskDashboard() {
     ];
   }, [open]);
 
-  const totalEst = risks.reduce((a, r) => a + r.estimatedTotal, 0);
-  const totalReleased = risks.reduce((a, r) => a + r.releasedTotal, 0);
-  const totalRealised = risks.reduce((a, r) => a + r.realisedTotal, 0);
+  const totalEst = activeRisks.reduce((a, r) => a + r.estimatedTotal, 0);
+  const totalReleased = activeRisks.reduce((a, r) => a + r.releasedTotal, 0);
+  const totalRealised = activeRisks.reduce((a, r) => a + r.realisedTotal, 0);
 
   const byCat = useMemo(
     () =>
@@ -51,8 +55,44 @@ export function RiskDashboard() {
       })),
     [open],
   );
-  const newByMonth = useMemo(() => countByMonth(risks.map((r) => r.createdAt)), [risks]);
+  const newByMonth = useMemo(
+    () => countByMonth(activeRisks.map((r) => r.createdAt)),
+    [activeRisks],
+  );
   const drawdown = useMemo(() => drawdownSeries(open), [open]);
+
+  const attention = useMemo(
+    () =>
+      open
+        .map((r) => {
+          const reasons: string[] = [];
+          if (isOverdue(r.nextReviewDate)) reasons.push("Review overdue");
+          if (isOverdue(r.targetDate)) reasons.push("Target date passed");
+          return reasons.length ? { risk: r, reasons } : null;
+        })
+        .filter((x): x is { risk: Risk; reasons: string[] } => x !== null)
+        .sort((a, b) => b.risk.score - a.risk.score),
+    [open],
+  );
+
+  if (activeRisks.length === 0) {
+    return (
+      <div style={{ padding: 24 }}>
+        <PageHeader title="Risk Dashboard" />
+        <Card>
+          <EmptyState
+            action={
+              <Btn variant="dark" icon={Plus} onClick={() => navigate("/risks/new")}>
+                Add Risk
+              </Btn>
+            }
+          >
+            No risks logged yet — add the first risk to populate the dashboard.
+          </EmptyState>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 24, overflow: "auto" }}>
@@ -94,8 +134,14 @@ export function RiskDashboard() {
         }}
       >
         <Card style={{ padding: 18 }}>
-          <SectionTitle>Risk Matrix</SectionTitle>
-          <RiskMatrix risks={open} onPick={(ref) => navigate(`/risks/${ref}`)} />
+          <SectionTitle sub="Click a count to open those risks in the register">
+            Risk Matrix
+          </SectionTitle>
+          <RiskMatrix
+            risks={open}
+            grid={config.matrix}
+            onPickCell={(l, i) => navigate(`/risks?l=${l}&i=${i}`)}
+          />
         </Card>
         <Card style={{ padding: 18 }}>
           <SectionTitle sub="Sorted by severity · Click a row for detail">
@@ -107,6 +153,46 @@ export function RiskDashboard() {
           />
         </Card>
       </div>
+
+      {/* Attention needed */}
+      <Card style={{ padding: 18, marginBottom: 18 }}>
+        <SectionTitle sub="Open risks with an overdue review or a passed target date">
+          Attention Needed {attention.length > 0 && `(${attention.length})`}
+        </SectionTitle>
+        {attention.length === 0 ? (
+          <div style={{ fontSize: 13, color: T.low, fontWeight: 600 }}>
+            All reviews and target dates are up to date.
+          </div>
+        ) : (
+          attention.map(({ risk, reasons }) => (
+            <div
+              key={risk.riskReference}
+              className="rs-row"
+              onClick={() => navigate(`/risks/${risk.riskReference}`)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "9px 4px",
+                borderTop: `1px solid ${T.strokeSubtle}`,
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              <AlertTriangle size={15} style={{ color: T.critical, flexShrink: 0 }} />
+              <span style={{ color: T.textTer, fontWeight: 600 }}>{risk.riskReference}</span>
+              <span style={{ fontWeight: 600, color: T.text, flex: 1 }}>{risk.title}</span>
+              <span style={{ color: T.critical, fontWeight: 600, fontSize: 12 }}>
+                {reasons.join(" · ")}
+              </span>
+              <span style={{ color: T.textSec, fontSize: 12 }}>
+                Review {formatDate(risk.nextReviewDate)}
+              </span>
+              <Pill level={risk.level} small />
+            </div>
+          ))
+        )}
+      </Card>
 
       {/* Distribution + Cost */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.25fr", gap: 14 }}>
@@ -158,7 +244,7 @@ export function RiskDashboard() {
             style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 8 }}
           >
             {[
-              { l: "Total Estimated Risk", v: totalEst, c: T.critical, s: "Across all open risks" },
+              { l: "Total Estimated Risk", v: totalEst, c: T.critical, s: "Across all active risks" },
               { l: "Total Released", v: totalReleased, c: T.brand, s: "Risks closed / retired" },
               { l: "Total Realised", v: totalRealised, c: T.high, s: "Costs incurred to date" },
             ].map((x) => (
@@ -167,20 +253,27 @@ export function RiskDashboard() {
                 style={{ padding: 12, background: T.bg, borderRadius: 6, borderLeft: `3px solid ${x.c}` }}
               >
                 <div style={{ fontSize: 11, color: T.textSec }}>{x.l}</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: x.c }}>{gbp(x.v)}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: x.c }}>{money(x.v)}</div>
                 <div style={{ fontSize: 10.5, color: T.textTer }}>{x.s}</div>
               </div>
             ))}
           </div>
           <div style={{ fontSize: 12, color: T.textSec, fontWeight: 600, margin: "4px 0" }}>
-            Risk Drawdown (£m)
+            Risk Drawdown ({currencySymbol()}m)
           </div>
           <ResponsiveContainer width="100%" height={185}>
             <LineChart data={drawdown}>
               <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
-              <XAxis dataKey="m" tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} />
+              <XAxis
+                dataKey="m"
+                tick={{ fontSize: 11, fill: T.textTer }}
+                axisLine={false}
+                tickLine={false}
+                minTickGap={20}
+                interval="preserveStartEnd"
+              />
               <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={24} />
-              <Tooltip formatter={(v: number) => `£${v.toFixed(2)}m`} />
+              <Tooltip formatter={(v: number) => `${currencySymbol()}${v.toFixed(2)}m`} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="est" name="Estimated" stroke={T.brand} strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="rel" name="Released" stroke={T.low} strokeWidth={2} dot={false} />

@@ -1,18 +1,18 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { evenPeriods, PeriodBreakdown } from "../../components/PeriodBreakdown";
+import { PeriodBreakdown } from "../../components/PeriodBreakdown";
 import {
   Btn, Card, Divider, EmptyState, Field, Grid2, Input, PageHeader, Pill, Select, SubHead, TextArea,
 } from "../../components/ui";
+import { usePageTitle } from "../../hooks/usePageTitle";
+import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { LEVEL_STYLES, T } from "../../theme/tokens";
 import type { CostProfile, Rating, RiskInput, RiskStatus, Scope } from "../../types/domain";
-import {
-  calcLevel, IMPACTS, LIKELIHOODS, PROGRAM_RISK_CATEGORIES, PROJECT_RISK_CATEGORIES,
-  RISK_STATUSES, WORKSTREAMS,
-} from "../../types/lookups";
-import { HOME_PROJECT } from "../../api/mock/seed";
+import { calcLevel, IMPACTS, LIKELIHOODS, RISK_STATUSES } from "../../types/lookups";
+import { currentMonthKey, evenProfile } from "../../utils/calendar";
+import { currencySymbol, parseNum } from "../../utils/format";
 
 interface FormState {
   scope: Scope;
@@ -25,6 +25,7 @@ interface FormState {
   impact: string;
   status: RiskStatus;
   targetDate: string;
+  nextReviewDate: string;
   projectId: string;
   mitigation: string;
   comments: string;
@@ -34,7 +35,7 @@ interface FormState {
   costProfile: CostProfile;
 }
 
-const emptyForm = (): FormState => ({
+const emptyForm = (defaultProjectId: string): FormState => ({
   scope: "Project",
   title: "",
   description: "",
@@ -45,22 +46,28 @@ const emptyForm = (): FormState => ({
   impact: "",
   status: "Open",
   targetDate: "",
-  projectId: HOME_PROJECT.id,
+  nextReviewDate: "",
+  projectId: defaultProjectId,
   mitigation: "",
   comments: "",
   estimatedTotal: "",
   releasedTotal: "0",
   realisedTotal: "0",
-  costProfile: { distribution: "Even", periods: evenPeriods(0) },
+  costProfile: evenProfile(0, currentMonthKey(), 12),
 });
 
 const RATING_OPTIONS = (labels: Record<Rating, string>) =>
   ([1, 2, 3, 4, 5] as Rating[]).map((n) => ({ value: n, label: `${n} – ${labels[n]}` }));
 
+/** Keep a record's existing value selectable even if it was removed from config. */
+const withCurrent = (options: string[], current: string): string[] =>
+  current && !options.includes(current) ? [...options, current] : options;
+
 function toInput(f: FormState): RiskInput {
   const likelihood = +f.likelihood as Rating;
   const impact = +f.impact as Rating;
   const isProject = f.scope === "Project";
+  const total = parseNum(f.estimatedTotal);
   return {
     scope: f.scope,
     title: f.title.trim(),
@@ -72,14 +79,14 @@ function toInput(f: FormState): RiskInput {
     impact,
     status: f.status,
     targetDate: f.targetDate || null,
+    nextReviewDate: f.nextReviewDate || null,
     projectId: isProject ? f.projectId || null : null,
-    regulatoryPeriod: "AMP8",
-    estimatedTotal: +f.estimatedTotal || 0,
-    releasedTotal: +f.releasedTotal || 0,
-    realisedTotal: +f.realisedTotal || 0,
+    estimatedTotal: total,
+    releasedTotal: parseNum(f.releasedTotal),
+    realisedTotal: parseNum(f.realisedTotal),
     costProfile:
       f.costProfile.distribution === "Even"
-        ? { distribution: "Even", periods: evenPeriods(+f.estimatedTotal || 0) }
+        ? evenProfile(total, f.costProfile.startMonth, f.costProfile.periods.length)
         : f.costProfile,
     mitigation: f.mitigation.trim(),
     comments: f.comments.trim(),
@@ -87,13 +94,36 @@ function toInput(f: FormState): RiskInput {
   };
 }
 
+/** Value-step validation, shared by the add wizard (step 2) and edit form. */
+function validateValues(f: FormState): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const est = parseNum(f.estimatedTotal);
+  const released = parseNum(f.releasedTotal);
+  const realised = parseNum(f.realisedTotal);
+  if (est <= 0) errors.estimatedTotal = "Enter a total risk value greater than zero";
+  if (released < 0) errors.releasedTotal = "Released value cannot be negative";
+  if (realised < 0) errors.realisedTotal = "Realised value cannot be negative";
+  if (released > est) errors.releasedTotal = "Released cannot exceed the estimated value";
+  if (realised > released) errors.realisedTotal = "Realised cannot exceed the released value";
+  if (f.costProfile.distribution === "Custom") {
+    const sum = f.costProfile.periods.reduce((a, v) => a + v, 0);
+    if (Math.abs(sum - est) > 1) {
+      errors.costProfile = "The custom monthly breakdown must add up to the total risk value";
+    }
+  }
+  return errors;
+}
+
 /* ============================== Add (wizard) ============================== */
 export function AddRisk() {
   const navigate = useNavigate();
-  const { risks, projects, createRisk } = useAppData();
+  const { risks, activeProjects, config, createRisk } = useAppData();
+  const toast = useToast();
+  usePageTitle("Add Risk");
   const [step, setStep] = useState<1 | 2>(1);
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState<FormState>(emptyForm());
+  const [attempted, setAttempted] = useState(false);
+  const [f, setF] = useState<FormState>(() => emptyForm(activeProjects[0]?.id ?? ""));
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setF((p) => ({ ...p, [k]: v }));
@@ -107,16 +137,28 @@ export function AddRisk() {
   }, [risks]);
 
   const level =
-    f.likelihood && f.impact ? calcLevel(+f.likelihood as Rating, +f.impact as Rating) : null;
-  const cats = f.scope === "Project" ? PROJECT_RISK_CATEGORIES : PROGRAM_RISK_CATEGORIES;
+    f.likelihood && f.impact
+      ? calcLevel(config.matrix, +f.likelihood as Rating, +f.impact as Rating)
+      : null;
+  const cats =
+    f.scope === "Project" ? config.projectRiskCategories : config.programRiskCategories;
   const step1Valid =
     f.title.trim() && f.description.trim() && f.category && f.owner.trim() && f.likelihood && f.impact;
+  const errors = attempted ? validateValues(f) : {};
 
   const save = async () => {
+    const issues = validateValues(f);
+    if (Object.keys(issues).length > 0) {
+      setAttempted(true);
+      return;
+    }
     setSaving(true);
     try {
       const rec = await createRisk(toInput(f));
+      toast.success(`Risk ${rec.riskReference} created`);
       navigate(`/risks/${rec.riskReference}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Saving the risk failed");
     } finally {
       setSaving(false);
     }
@@ -135,7 +177,7 @@ export function AddRisk() {
             {/* scope */}
             <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
               {(["Project", "Program"] as Scope[]).map((s) => (
-                <div
+                <button
                   key={s}
                   onClick={() => {
                     set("scope", s);
@@ -146,13 +188,15 @@ export function AddRisk() {
                     borderRadius: 6,
                     fontSize: 12.5,
                     fontWeight: 600,
+                    fontFamily: T.font,
+                    border: "none",
                     cursor: "pointer",
                     background: f.scope === s ? T.brand : T.bg,
                     color: f.scope === s ? "#fff" : T.textSec,
                   }}
                 >
                   {s} Scope
-                </div>
+                </button>
               ))}
             </div>
 
@@ -203,7 +247,7 @@ export function AddRisk() {
                     <Select
                       value={f.workstream}
                       onChange={(v) => set("workstream", v)}
-                      options={WORKSTREAMS}
+                      options={config.workstreams}
                       placeholder="Select workstream…"
                     />
                   </Field>
@@ -211,7 +255,7 @@ export function AddRisk() {
                     <Select
                       value={f.projectId}
                       onChange={(v) => set("projectId", v)}
-                      options={projects.map((p) => ({ value: p.id, label: p.name }))}
+                      options={activeProjects.map((p) => ({ value: p.id, label: p.name }))}
                       placeholder="Select project…"
                     />
                   </Field>
@@ -245,6 +289,13 @@ export function AddRisk() {
                   type="date"
                   value={f.targetDate}
                   onChange={(e) => set("targetDate", e.target.value)}
+                />
+              </Field>
+              <Field label="Next Review Date">
+                <Input
+                  type="date"
+                  value={f.nextReviewDate}
+                  onChange={(e) => set("nextReviewDate", e.target.value)}
                 />
               </Field>
             </Grid2>
@@ -288,18 +339,28 @@ export function AddRisk() {
           <>
             <SubHead>Risk Value Information</SubHead>
             <Grid2>
-              <Field label="Total Risk Value (£)" required>
+              <Field
+                label={`Total Risk Value (${currencySymbol()})`}
+                required
+                error={errors.estimatedTotal}
+              >
                 <Input
                   type="number"
+                  inputMode="decimal"
+                  min={0}
                   placeholder="Enter total risk value…"
                   value={f.estimatedTotal}
                   onChange={(e) => {
                     set("estimatedTotal", e.target.value);
                     if (f.costProfile.distribution === "Even") {
-                      set("costProfile", {
-                        distribution: "Even",
-                        periods: evenPeriods(+e.target.value || 0),
-                      });
+                      set(
+                        "costProfile",
+                        evenProfile(
+                          parseNum(e.target.value),
+                          f.costProfile.startMonth,
+                          f.costProfile.periods.length,
+                        ),
+                      );
                     }
                   }}
                 />
@@ -311,16 +372,21 @@ export function AddRisk() {
 
             <PeriodBreakdown
               profile={f.costProfile}
-              total={+f.estimatedTotal || 0}
+              total={parseNum(f.estimatedTotal)}
               onChange={(p) => set("costProfile", p)}
             />
+            {errors.costProfile && (
+              <div role="alert" style={{ fontSize: 12, color: T.critical, fontWeight: 600, marginTop: 8 }}>
+                {errors.costProfile}
+              </div>
+            )}
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
               <Btn variant="default" icon={ArrowLeft} onClick={() => setStep(1)}>
                 Back
               </Btn>
-              <Btn variant="primary" onClick={save} disabled={saving}>
-                {saving ? "Saving…" : "Save Risk"}
+              <Btn variant="primary" onClick={() => void save()} loading={saving}>
+                Save Risk
               </Btn>
             </div>
           </>
@@ -334,10 +400,13 @@ export function AddRisk() {
 export function EditRisk() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
-  const { risks, projects, updateRisk } = useAppData();
+  const { risks, activeProjects, config, updateRisk } = useAppData();
+  const toast = useToast();
   const risk = risks.find((r) => r.riskReference === ref);
+  usePageTitle(risk ? `Edit ${risk.riskReference}` : "Risk not found");
 
   const [saving, setSaving] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const [f, setF] = useState<FormState | null>(() =>
     risk
       ? {
@@ -351,6 +420,7 @@ export function EditRisk() {
           impact: String(risk.impact),
           status: risk.status,
           targetDate: risk.targetDate ?? "",
+          nextReviewDate: risk.nextReviewDate ?? "",
           projectId: risk.projectId ?? "",
           mitigation: risk.mitigation,
           comments: risk.comments,
@@ -379,15 +449,28 @@ export function EditRisk() {
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setF((p) => (p ? { ...p, [k]: v } : p));
 
-  const level = calcLevel(+f.likelihood as Rating, +f.impact as Rating);
+  const level = calcLevel(config.matrix, +f.likelihood as Rating, +f.impact as Rating);
   const s = LEVEL_STYLES[level];
-  const cats = f.scope === "Project" ? PROJECT_RISK_CATEGORIES : PROGRAM_RISK_CATEGORIES;
+  const cats = withCurrent(
+    f.scope === "Project" ? config.projectRiskCategories : config.programRiskCategories,
+    f.category,
+  );
+  const errors = attempted ? validateValues(f) : {};
 
   const save = async () => {
+    const issues = validateValues(f);
+    if (Object.keys(issues).length > 0) {
+      setAttempted(true);
+      toast.error("Fix the highlighted value fields before saving");
+      return;
+    }
     setSaving(true);
     try {
       await updateRisk(risk.riskReference, toInput(f));
+      toast.success(`Risk ${risk.riskReference} updated`);
       navigate(`/risks/${risk.riskReference}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Saving the risk failed");
     } finally {
       setSaving(false);
     }
@@ -445,7 +528,7 @@ export function EditRisk() {
                 <Select
                   value={f.workstream}
                   onChange={(v) => set("workstream", v)}
-                  options={WORKSTREAMS}
+                  options={withCurrent(config.workstreams, f.workstream)}
                   placeholder="Select workstream…"
                 />
               </Field>
@@ -453,7 +536,8 @@ export function EditRisk() {
                 <Select
                   value={f.projectId}
                   onChange={(v) => set("projectId", v)}
-                  options={projects.map((p) => ({ value: p.id, label: p.name }))}
+                  options={activeProjects.map((p) => ({ value: p.id, label: p.name }))}
+                  placeholder="Select project…"
                 />
               </Field>
             </>
@@ -482,6 +566,13 @@ export function EditRisk() {
           <Field label="Target Resolution Date">
             <Input type="date" value={f.targetDate} onChange={(e) => set("targetDate", e.target.value)} />
           </Field>
+          <Field label="Next Review Date">
+            <Input
+              type="date"
+              value={f.nextReviewDate}
+              onChange={(e) => set("nextReviewDate", e.target.value)}
+            />
+          </Field>
         </Grid2>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: T.textSec }}>
@@ -491,33 +582,43 @@ export function EditRisk() {
         </div>
 
         <Divider />
-        <SubHead>Risk Value (£)</SubHead>
+        <SubHead>Risk Value ({currencySymbol()})</SubHead>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-          <Field label="Estimated Risk Value">
+          <Field label="Estimated Risk Value" error={errors.estimatedTotal}>
             <Input
               type="number"
+              inputMode="decimal"
+              min={0}
               value={f.estimatedTotal}
               onChange={(e) => {
                 set("estimatedTotal", e.target.value);
                 if (f.costProfile.distribution === "Even") {
-                  set("costProfile", {
-                    distribution: "Even",
-                    periods: evenPeriods(+e.target.value || 0),
-                  });
+                  set(
+                    "costProfile",
+                    evenProfile(
+                      parseNum(e.target.value),
+                      f.costProfile.startMonth,
+                      f.costProfile.periods.length,
+                    ),
+                  );
                 }
               }}
             />
           </Field>
-          <Field label="Released Risk">
+          <Field label="Released Risk" error={errors.releasedTotal}>
             <Input
               type="number"
+              inputMode="decimal"
+              min={0}
               value={f.releasedTotal}
               onChange={(e) => set("releasedTotal", e.target.value)}
             />
           </Field>
-          <Field label="Realised Risk">
+          <Field label="Realised Risk" error={errors.realisedTotal}>
             <Input
               type="number"
+              inputMode="decimal"
+              min={0}
               value={f.realisedTotal}
               onChange={(e) => set("realisedTotal", e.target.value)}
             />
@@ -525,12 +626,17 @@ export function EditRisk() {
         </div>
 
         <Divider />
-        <SubHead>Cost Profile – 12-Period Breakdown</SubHead>
+        <SubHead>Cost Profile</SubHead>
         <PeriodBreakdown
           profile={f.costProfile}
-          total={+f.estimatedTotal || 0}
+          total={parseNum(f.estimatedTotal)}
           onChange={(p) => set("costProfile", p)}
         />
+        {errors.costProfile && (
+          <div role="alert" style={{ fontSize: 12, color: T.critical, fontWeight: 600, marginTop: 8 }}>
+            {errors.costProfile}
+          </div>
+        )}
 
         <div style={{ marginTop: 14 }}>
           <Field label="Mitigation Plan">
@@ -547,8 +653,8 @@ export function EditRisk() {
           <Btn variant="default" onClick={() => navigate(`/risks/${risk.riskReference}`)}>
             Cancel
           </Btn>
-          <Btn variant="primary" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save Risk"}
+          <Btn variant="primary" onClick={() => void save()} loading={saving}>
+            Save Risk
           </Btn>
         </div>
       </Card>

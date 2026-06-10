@@ -14,10 +14,12 @@ export type Rating = 1 | 2 | 3 | 4 | 5;
 
 export type DistributionMethod = "Even" | "Custom";
 
-/** 12-period (Jan–Dec) cost spread for a financial year. */
+/** Calendar-anchored cost spread: one entry per month from `startMonth`. */
 export interface CostProfile {
   distribution: DistributionMethod;
-  /** Always 12 entries, period 1 = Jan. */
+  /** First month of the profile, "yyyy-mm". */
+  startMonth: string;
+  /** One entry per calendar month; length 1–60 (max 5 years). */
   periods: number[];
 }
 
@@ -33,13 +35,14 @@ export interface Risk {
   impact: Rating;
   /** Derived: likelihood × impact (server-computed in HTTP mode). */
   score: number;
-  /** Derived from the 5×5 band matrix (server-computed in HTTP mode). */
+  /** Derived from the configured 5×5 band matrix (server-computed in HTTP mode). */
   level: RiskLevel;
   status: RiskStatus;
   /** ISO date (yyyy-mm-dd) or null. */
   targetDate: string | null;
+  /** Next scheduled review, ISO date (yyyy-mm-dd) or null. */
+  nextReviewDate: string | null;
   projectId: string | null;
-  regulatoryPeriod: string;
   estimatedTotal: number;
   releasedTotal: number;
   realisedTotal: number;
@@ -47,6 +50,8 @@ export interface Risk {
   mitigation: string;
   comments: string;
   linkedChangeRefs: string[];
+  /** Soft-deleted; hidden from dashboards and default register views. */
+  archived: boolean;
   /** ISO datetime. */
   createdAt: string;
   /** ISO datetime. */
@@ -56,7 +61,7 @@ export interface Risk {
 /** Payload for create/update — derived + server-owned fields excluded. */
 export type RiskInput = Omit<
   Risk,
-  "riskReference" | "score" | "level" | "createdAt" | "updatedAt"
+  "riskReference" | "score" | "level" | "archived" | "createdAt" | "updatedAt"
 >;
 
 /* --------------------------------- Change -------------------------------- */
@@ -98,13 +103,12 @@ export interface ChangeRequest {
   status: ChangeStatus;
   raisedBy: string;
   owner: string;
-  /** Net cost impact in £ (negative = saving). */
+  /** Net cost impact (negative = saving). */
   costImpact: number;
   costProfile: CostProfile;
   /** Net schedule impact in days (negative = acceleration). */
   scheduleImpactDays: number;
   projectId: string | null;
-  regulatoryPeriod: string;
   linkedRiskRefs: string[];
   approvalHistory: ChangeApprovalEvent[];
   /** ISO date (yyyy-mm-dd) or null. */
@@ -124,12 +128,11 @@ export interface Project {
   id: string;
   name: string;
   code: string;
+  /** Archived projects stay resolvable on old records but are hidden from pickers. */
+  archived: boolean;
 }
 
-export interface RegulatoryPeriod {
-  code: string;
-  label: string;
-}
+export type ProjectInput = Omit<Project, "id" | "archived">;
 
 export interface AppUser {
   initials: string;

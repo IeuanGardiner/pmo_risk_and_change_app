@@ -1,17 +1,19 @@
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import { evenPeriods, PeriodBreakdown } from "../../components/PeriodBreakdown";
+import { PeriodBreakdown } from "../../components/PeriodBreakdown";
 import {
   Btn, Card, ChangeStatusPill, Divider, EmptyState, Field, Grid2, Input, PageHeader, Pill,
   Select, SubHead, TextArea,
 } from "../../components/ui";
+import { usePageTitle } from "../../hooks/usePageTitle";
+import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { T } from "../../theme/tokens";
-import type { ChangeInput, ChangePriority, CostProfile, Scope } from "../../types/domain";
-import { CHANGE_CATEGORIES, CHANGE_PRIORITIES } from "../../types/lookups";
-import { HOME_PROJECT } from "../../api/mock/seed";
-import { gbp } from "../../utils/format";
+import type { ChangeInput, ChangePriority, CostProfile, Risk, Scope } from "../../types/domain";
+import { CHANGE_PRIORITIES } from "../../types/lookups";
+import { currentMonthKey, evenProfile } from "../../utils/calendar";
+import { currencySymbol, money, parseNum } from "../../utils/format";
 
 interface FormState {
   scope: Scope;
@@ -30,9 +32,13 @@ interface FormState {
   costProfile: CostProfile;
 }
 
+/** Keep a record's existing value selectable even if it was removed from config. */
+const withCurrent = (options: string[], current: string): string[] =>
+  current && !options.includes(current) ? [...options, current] : options;
+
 function toInput(f: FormState): ChangeInput {
   const isProject = f.scope === "Project";
-  const cost = +f.costImpact || 0;
+  const cost = parseNum(f.costImpact);
   return {
     scope: f.scope,
     title: f.title.trim(),
@@ -45,28 +51,46 @@ function toInput(f: FormState): ChangeInput {
     costImpact: cost,
     costProfile:
       f.costProfile.distribution === "Even"
-        ? { distribution: "Even", periods: evenPeriods(cost) }
+        ? evenProfile(cost, f.costProfile.startMonth, f.costProfile.periods.length)
         : f.costProfile,
-    scheduleImpactDays: +f.scheduleImpactDays || 0,
+    scheduleImpactDays: parseNum(f.scheduleImpactDays),
     projectId: isProject ? f.projectId || null : null,
-    regulatoryPeriod: "AMP8",
     linkedRiskRefs: f.linkedRiskRefs,
     requiredBy: f.requiredBy || null,
   };
 }
 
+/** Impact-step validation. */
+function validateImpact(f: FormState): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (f.costImpact.trim() === "") {
+    errors.costImpact = "Enter the net cost impact (0 is allowed)";
+  }
+  if (f.costProfile.distribution === "Custom") {
+    const sum = f.costProfile.periods.reduce((a, v) => a + v, 0);
+    if (Math.abs(sum - parseNum(f.costImpact)) > 1) {
+      errors.costProfile = "The custom monthly breakdown must add up to the cost impact";
+    }
+  }
+  return errors;
+}
+
 /** Checkbox-chip selector for linking open risks to the change. */
-function RiskLinker({
+const RiskLinker = memo(function RiskLinker({
+  risks,
   selected,
   scope,
   onToggle,
 }: {
+  risks: Risk[];
   selected: string[];
   scope: Scope;
   onToggle: (ref: string) => void;
 }) {
-  const { risks } = useAppData();
-  const candidates = risks.filter((r) => r.status !== "Closed" && r.scope === scope);
+  const candidates = useMemo(
+    () => risks.filter((r) => r.status !== "Closed" && r.scope === scope),
+    [risks, scope],
+  );
   if (candidates.length === 0) {
     return <div style={{ fontSize: 13, color: T.textTer }}>No open risks in this scope.</div>;
   }
@@ -93,14 +117,14 @@ function RiskLinker({
             <input type="checkbox" checked={on} readOnly style={{ accentColor: T.brand }} />
             <span style={{ color: T.textTer, fontWeight: 600 }}>{r.riskReference}</span>
             <span style={{ fontWeight: 600, color: T.text, flex: 1 }}>{r.title}</span>
-            <span style={{ color: T.textSec }}>{gbp(r.estimatedTotal)}</span>
+            <span style={{ color: T.textSec }}>{money(r.estimatedTotal)}</span>
             <Pill level={r.level} small />
           </div>
         );
       })}
     </div>
   );
-}
+});
 
 /* ---- Shared form sections -------------------------------------------------- */
 function ChangeInfoFields({
@@ -112,7 +136,17 @@ function ChangeInfoFields({
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
   referenceLabel: string;
 }) {
-  const { projects } = useAppData();
+  const { activeProjects, activeRisks, config } = useAppData();
+  const onToggleRisk = useCallback(
+    (ref: string) =>
+      set(
+        "linkedRiskRefs",
+        f.linkedRiskRefs.includes(ref)
+          ? f.linkedRiskRefs.filter((r) => r !== ref)
+          : [...f.linkedRiskRefs, ref],
+      ),
+    [f.linkedRiskRefs, set],
+  );
   return (
     <>
       <SubHead>Change Information</SubHead>
@@ -154,7 +188,7 @@ function ChangeInfoFields({
           <Select
             value={f.category}
             onChange={(v) => set("category", v)}
-            options={CHANGE_CATEGORIES}
+            options={withCurrent(config.changeCategories, f.category)}
             placeholder="Select category…"
           />
         </Field>
@@ -180,7 +214,7 @@ function ChangeInfoFields({
             <Select
               value={f.projectId}
               onChange={(v) => set("projectId", v)}
-              options={projects.map((p) => ({ value: p.id, label: p.name }))}
+              options={activeProjects.map((p) => ({ value: p.id, label: p.name }))}
               placeholder="Select project…"
             />
           </Field>
@@ -197,16 +231,10 @@ function ChangeInfoFields({
       <Divider />
       <SubHead>Linked Risks</SubHead>
       <RiskLinker
+        risks={activeRisks}
         selected={f.linkedRiskRefs}
         scope={f.scope}
-        onToggle={(ref) =>
-          set(
-            "linkedRiskRefs",
-            f.linkedRiskRefs.includes(ref)
-              ? f.linkedRiskRefs.filter((r) => r !== ref)
-              : [...f.linkedRiskRefs, ref],
-          )
-        }
+        onToggle={onToggleRisk}
       />
     </>
   );
@@ -215,26 +243,37 @@ function ChangeInfoFields({
 function ImpactFields({
   f,
   set,
+  errors,
 }: {
   f: FormState;
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+  errors: Record<string, string>;
 }) {
   return (
     <>
       <SubHead>Impact Assessment</SubHead>
       <Grid2>
-        <Field label="Cost Impact (£) — negative for a saving" required>
+        <Field
+          label={`Cost Impact (${currencySymbol()}) — negative for a saving`}
+          required
+          error={errors.costImpact}
+        >
           <Input
             type="number"
+            inputMode="decimal"
             placeholder="Enter net cost impact…"
             value={f.costImpact}
             onChange={(e) => {
               set("costImpact", e.target.value);
               if (f.costProfile.distribution === "Even") {
-                set("costProfile", {
-                  distribution: "Even",
-                  periods: evenPeriods(+e.target.value || 0),
-                });
+                set(
+                  "costProfile",
+                  evenProfile(
+                    parseNum(e.target.value),
+                    f.costProfile.startMonth,
+                    f.costProfile.periods.length,
+                  ),
+                );
               }
             }}
           />
@@ -242,6 +281,7 @@ function ImpactFields({
         <Field label="Schedule Impact (days) — negative for acceleration">
           <Input
             type="number"
+            inputMode="numeric"
             placeholder="0"
             value={f.scheduleImpactDays}
             onChange={(e) => set("scheduleImpactDays", e.target.value)}
@@ -250,9 +290,14 @@ function ImpactFields({
       </Grid2>
       <PeriodBreakdown
         profile={f.costProfile}
-        total={+f.costImpact || 0}
+        total={parseNum(f.costImpact)}
         onChange={(p) => set("costProfile", p)}
       />
+      {errors.costProfile && (
+        <div role="alert" style={{ fontSize: 12, color: T.critical, fontWeight: 600, marginTop: 8 }}>
+          {errors.costProfile}
+        </div>
+      )}
     </>
   );
 }
@@ -260,10 +305,13 @@ function ImpactFields({
 /* ============================ Raise (wizard) ============================== */
 export function AddChange() {
   const navigate = useNavigate();
-  const { changes, user, createChange } = useAppData();
+  const { changes, activeProjects, user, createChange } = useAppData();
+  const toast = useToast();
+  usePageTitle("Raise Change");
   const [step, setStep] = useState<1 | 2>(1);
   const [saving, setSaving] = useState(false);
-  const [f, setF] = useState<FormState>({
+  const [attempted, setAttempted] = useState(false);
+  const [f, setF] = useState<FormState>(() => ({
     scope: "Project",
     title: "",
     description: "",
@@ -273,15 +321,17 @@ export function AddChange() {
     owner: "",
     raisedBy: user?.name ?? "",
     requiredBy: "",
-    projectId: HOME_PROJECT.id,
+    projectId: activeProjects[0]?.id ?? "",
     costImpact: "",
     scheduleImpactDays: "",
     linkedRiskRefs: [],
-    costProfile: { distribution: "Even", periods: evenPeriods(0) },
-  });
+    costProfile: evenProfile(0, currentMonthKey(), 12),
+  }));
 
-  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
-    setF((p) => ({ ...p, [k]: v }));
+  const set = useCallback(
+    <K extends keyof FormState>(k: K, v: FormState[K]) => setF((p) => ({ ...p, [k]: v })),
+    [],
+  );
 
   const nextRef = useMemo(() => {
     const max = changes.reduce((acc, c) => {
@@ -298,12 +348,21 @@ export function AddChange() {
     f.category &&
     f.owner.trim() &&
     f.raisedBy.trim();
+  const errors = attempted ? validateImpact(f) : {};
 
   const save = async () => {
+    const issues = validateImpact(f);
+    if (Object.keys(issues).length > 0) {
+      setAttempted(true);
+      return;
+    }
     setSaving(true);
     try {
       const rec = await createChange(toInput(f));
+      toast.success(`Change ${rec.changeReference} saved as Draft`);
       navigate(`/changes/${rec.changeReference}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Saving the change failed");
     } finally {
       setSaving(false);
     }
@@ -325,7 +384,7 @@ export function AddChange() {
           <>
             <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
               {(["Project", "Program"] as Scope[]).map((s) => (
-                <div
+                <button
                   key={s}
                   onClick={() => {
                     set("scope", s);
@@ -336,13 +395,15 @@ export function AddChange() {
                     borderRadius: 6,
                     fontSize: 12.5,
                     fontWeight: 600,
+                    fontFamily: T.font,
+                    border: "none",
                     cursor: "pointer",
                     background: f.scope === s ? T.brand : T.bg,
                     color: f.scope === s ? "#fff" : T.textSec,
                   }}
                 >
                   {s} Scope
-                </div>
+                </button>
               ))}
             </div>
 
@@ -365,13 +426,13 @@ export function AddChange() {
           </>
         ) : (
           <>
-            <ImpactFields f={f} set={set} />
+            <ImpactFields f={f} set={set} errors={errors} />
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
               <Btn variant="default" icon={ArrowLeft} onClick={() => setStep(1)}>
                 Back
               </Btn>
-              <Btn variant="primary" onClick={save} disabled={saving}>
-                {saving ? "Saving…" : "Save as Draft"}
+              <Btn variant="primary" onClick={() => void save()} loading={saving}>
+                Save as Draft
               </Btn>
             </div>
           </>
@@ -386,8 +447,11 @@ export function EditChange() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
   const { changes, updateChange } = useAppData();
+  const toast = useToast();
   const change = changes.find((c) => c.changeReference === ref);
+  usePageTitle(change ? `Edit ${change.changeReference}` : "Change not found");
   const [saving, setSaving] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const [f, setF] = useState<FormState | null>(() =>
     change
       ? {
@@ -409,6 +473,12 @@ export function EditChange() {
       : null,
   );
 
+  const set = useCallback(
+    <K extends keyof FormState>(k: K, v: FormState[K]) =>
+      setF((p) => (p ? { ...p, [k]: v } : p)),
+    [],
+  );
+
   if (!change || !f) {
     return (
       <div style={{ padding: 24 }}>
@@ -423,14 +493,22 @@ export function EditChange() {
     );
   }
 
-  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
-    setF((p) => (p ? { ...p, [k]: v } : p));
+  const errors = attempted ? validateImpact(f) : {};
 
   const save = async () => {
+    const issues = validateImpact(f);
+    if (Object.keys(issues).length > 0) {
+      setAttempted(true);
+      toast.error("Fix the highlighted impact fields before saving");
+      return;
+    }
     setSaving(true);
     try {
       await updateChange(change.changeReference, toInput(f));
+      toast.success(`Change ${change.changeReference} updated`);
       navigate(`/changes/${change.changeReference}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Saving the change failed");
     } finally {
       setSaving(false);
     }
@@ -470,13 +548,13 @@ export function EditChange() {
       <Card style={{ padding: 26, maxWidth: 920 }}>
         <ChangeInfoFields f={f} set={set} referenceLabel={change.changeReference} />
         <Divider />
-        <ImpactFields f={f} set={set} />
+        <ImpactFields f={f} set={set} errors={errors} />
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
           <Btn variant="default" onClick={() => navigate(`/changes/${change.changeReference}`)}>
             Cancel
           </Btn>
-          <Btn variant="primary" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save Change"}
+          <Btn variant="primary" onClick={() => void save()} loading={saving}>
+            Save Change
           </Btn>
         </div>
       </Card>

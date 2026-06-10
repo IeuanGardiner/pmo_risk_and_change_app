@@ -1,9 +1,19 @@
-import type { ChangeRequest, Risk } from "../types/domain";
-import { PERIOD_MONTHS } from "../types/lookups";
+import type { ChangeRequest, CostProfile, Risk } from "../types/domain";
+import {
+  addMonths,
+  isMonthKey,
+  monthDiff,
+  monthKeyLabel,
+  monthRange,
+  profileMonths,
+  type MonthKey,
+} from "./calendar";
 
 /* ----------------------------------------------------------------------------
    Chart series derived from live data — these recompute automatically when
-   the backend supplies real records.
+   the backend supplies real records. Profiles are calendar-anchored, so
+   multi-record series are built over a shared month timeline (the contiguous
+   union of every profile's coverage).
    -------------------------------------------------------------------------- */
 
 export interface MonthCount {
@@ -34,6 +44,37 @@ export function countByMonth(createdDates: string[], window = 8): MonthCount[] {
   return buckets.map((b) => ({ m: b.label, v: counts.get(b.key) ?? 0 }));
 }
 
+/* ---- Calendar timeline helpers ------------------------------------------- */
+
+export interface TimelinePoint {
+  key: MonthKey;
+  label: string;
+}
+
+/** Contiguous month timeline spanning every profile, earliest start to latest
+    end. Months not covered by a given profile contribute 0. */
+export function buildTimeline(profiles: CostProfile[]): TimelinePoint[] {
+  const valid = profiles.filter((p) => isMonthKey(p.startMonth) && p.periods.length > 0);
+  if (valid.length === 0) return [];
+  let min = valid[0].startMonth;
+  let max = valid[0].startMonth;
+  for (const p of valid) {
+    const end = addMonths(p.startMonth, p.periods.length - 1);
+    if (monthDiff(min, p.startMonth) < 0) min = p.startMonth;
+    if (monthDiff(max, end) > 0) max = end;
+  }
+  return monthRange(min, monthDiff(min, max) + 1).map((key) => ({
+    key,
+    label: monthKeyLabel(key),
+  }));
+}
+
+/** A profile's value in a given calendar month (0 outside its coverage). */
+export function valueAt(profile: CostProfile, key: MonthKey): number {
+  const idx = monthDiff(profile.startMonth, key);
+  return idx >= 0 && idx < profile.periods.length ? (profile.periods[idx] ?? 0) : 0;
+}
+
 export interface DrawdownPoint {
   m: string;
   est: number;
@@ -41,26 +82,43 @@ export interface DrawdownPoint {
   real: number;
 }
 
-/** Risk pot drawdown across the 12 periods (£m): estimated exposure remaining
-    vs cumulative released / realised. */
+/** Portfolio drawdown across the shared timeline (in millions): estimated
+    exposure remaining vs cumulative released / realised. */
 export function drawdownSeries(risks: Risk[]): DrawdownPoint[] {
+  const timeline = buildTimeline(risks.map((r) => r.costProfile));
+  if (timeline.length === 0) return [];
   const totalEst = risks.reduce((a, r) => a + r.estimatedTotal, 0);
-  const estPerPeriod = PERIOD_MONTHS.map((_, p) =>
-    risks.reduce((a, r) => a + (r.costProfile.periods[p] ?? 0), 0),
-  );
-  const relPerPeriod = risks.reduce((a, r) => a + r.releasedTotal, 0) / 12;
-  const realPerPeriod = risks.reduce((a, r) => a + r.realisedTotal, 0) / 12;
+  const totalRel = risks.reduce((a, r) => a + r.releasedTotal, 0);
+  const totalReal = risks.reduce((a, r) => a + r.realisedTotal, 0);
 
   let cumEst = 0;
-  return PERIOD_MONTHS.map((m, p) => {
-    cumEst += estPerPeriod[p];
+  return timeline.map((t, i) => {
+    cumEst += risks.reduce((a, r) => a + valueAt(r.costProfile, t.key), 0);
+    const progress = (i + 1) / timeline.length;
     return {
-      m,
+      m: t.label,
       est: Math.max(totalEst - cumEst, 0) / 1e6,
-      rel: (relPerPeriod * (p + 1)) / 1e6,
-      real: (realPerPeriod * (p + 1)) / 1e6,
+      rel: (totalRel * progress) / 1e6,
+      real: (totalReal * progress) / 1e6,
     };
   });
+}
+
+/** Single risk: estimated exposure remaining per month (in millions). */
+export function riskDrawdown(risk: Risk): { m: string; est: number }[] {
+  let remaining = risk.estimatedTotal;
+  return profileMonths(risk.costProfile).map((key, i) => {
+    remaining -= risk.costProfile.periods[i] ?? 0;
+    return { m: monthKeyLabel(key), est: Math.max(remaining, 0) / 1e6 };
+  });
+}
+
+/** Per-month values of a single profile, labelled with real months. */
+export function profileSeries(profile: CostProfile): { m: string; v: number }[] {
+  return profileMonths(profile).map((key, i) => ({
+    m: monthKeyLabel(key),
+    v: profile.periods[i] ?? 0,
+  }));
 }
 
 export interface NameValue {

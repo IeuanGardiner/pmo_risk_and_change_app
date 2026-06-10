@@ -1,40 +1,57 @@
-import { Card, PageHeader, SectionTitle } from "../../components/ui";
+import { useMemo, useState } from "react";
+import { RotateCcw, Save } from "lucide-react";
+import { Btn, Card, Field, PageHeader, SectionTitle, Select } from "../../components/ui";
+import { usePageTitle } from "../../hooks/usePageTitle";
+import { useToast } from "../../components/Toast";
 import { isMockMode } from "../../api";
 import { useAppData } from "../../store/AppData";
-import { LEVEL_STYLES, T } from "../../theme/tokens";
-import {
-  CHANGE_CATEGORIES, GRID, PROGRAM_RISK_CATEGORIES, PROJECT_RISK_CATEGORIES, WORKSTREAMS,
-} from "../../types/lookups";
-import type { Rating } from "../../types/domain";
-
-const RATINGS: Rating[] = [1, 2, 3, 4, 5];
+import { T } from "../../theme/tokens";
+import { CURRENCIES, type AppConfig } from "../../types/config";
+import { LookupListEditor } from "./LookupListEditor";
+import { MatrixEditor } from "./MatrixEditor";
+import { ProjectsManager } from "./ProjectsManager";
 
 export function SettingsPage() {
-  const { projects, periods, user } = useAppData();
+  const { risks, changes, config, updateConfig, user } = useAppData();
+  const toast = useToast();
+  usePageTitle("Settings");
   const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
 
-  const chip = (label: string) => (
-    <span
-      key={label}
-      style={{
-        padding: "4px 10px",
-        borderRadius: 14,
-        background: T.bg,
-        border: `1px solid ${T.stroke}`,
-        fontSize: 12,
-        color: T.textSec,
-        fontWeight: 600,
-      }}
-    >
-      {label}
-    </span>
-  );
+  const [draft, setDraft] = useState<AppConfig>(config);
+  const [saving, setSaving] = useState(false);
+  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(config), [draft, config]);
+
+  const setPart = <K extends keyof AppConfig>(k: K, v: AppConfig[K]) =>
+    setDraft((p) => ({ ...p, [k]: v }));
+
+  /* Usage counts cover every record (including archived) so a value can't be
+     deleted while anything still references it. */
+  const usage = {
+    projectCategory: (v: string) =>
+      risks.filter((r) => r.scope === "Project" && r.category === v).length,
+    programCategory: (v: string) =>
+      risks.filter((r) => r.scope === "Program" && r.category === v).length,
+    workstream: (v: string) => risks.filter((r) => r.workstream === v).length,
+    changeCategory: (v: string) => changes.filter((c) => c.category === v).length,
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await updateConfig(draft);
+      toast.success("Configuration saved — risk levels recalculated");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Saving configuration failed");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <div style={{ padding: 24, overflow: "auto" }}>
+    <div style={{ padding: 24, overflow: "auto", position: "relative", minHeight: "100%" }}>
       <PageHeader
         title="Settings"
-        subtitle="Environment, scoring model and reference data"
+        subtitle="Tailor the app per client — scoring model, lookups, projects and currency"
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -57,7 +74,8 @@ export function SettingsPage() {
               </div>
               {isMockMode ? (
                 <>
-                  The app is running on the built-in mock service layer. Set{" "}
+                  The app is running on the built-in mock service layer; configuration changes are
+                  saved to this browser. Set{" "}
                   <code style={{ background: T.bg, padding: "1px 5px", borderRadius: 3 }}>
                     VITE_API_BASE_URL
                   </code>{" "}
@@ -99,104 +117,115 @@ export function SettingsPage() {
           </Card>
 
           <Card style={{ padding: 18 }}>
-            <SectionTitle sub="Reference data served by the backend">Projects &amp; Periods</SectionTitle>
-            {projects.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "9px 0",
-                  borderBottom: `1px solid ${T.strokeSubtle}`,
-                  fontSize: 13,
-                }}
-              >
-                <span style={{ fontWeight: 600, color: T.text }}>{p.name}</span>
-                <span style={{ color: T.textTer }}>{p.code}</span>
-              </div>
-            ))}
-            <div style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {periods.map((p) => chip(p.label))}
-            </div>
+            <ProjectsManager />
           </Card>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <Card style={{ padding: 18 }}>
-            <SectionTitle sub="GRID[impact][likelihood] — drives the calculated level">
+            <SectionTitle sub="Click any cell to cycle its band — saving recalculates every risk's level">
               Scoring Model (5×5)
             </SectionTitle>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
-              <tbody>
-                {[5, 4, 3, 2, 1].map((impact) => (
-                  <tr key={impact}>
-                    <td style={{ padding: 3, color: T.textTer, fontWeight: 600, width: 22 }}>
-                      I{impact}
-                    </td>
-                    {RATINGS.map((likelihood) => {
-                      const level = GRID[impact as Rating][likelihood];
-                      const s = LEVEL_STYLES[level];
-                      return (
-                        <td key={likelihood} style={{ padding: 3 }}>
-                          <div
-                            style={{
-                              background: s.bg,
-                              border: `1px solid ${s.c}`,
-                              color: s.c,
-                              borderRadius: 4,
-                              textAlign: "center",
-                              padding: "6px 0",
-                              fontWeight: 700,
-                            }}
-                          >
-                            {level}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-                <tr>
-                  <td />
-                  {RATINGS.map((l) => (
-                    <td key={l} style={{ padding: 3, textAlign: "center", color: T.textTer, fontWeight: 600 }}>
-                      L{l}
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
+            <MatrixEditor grid={draft.matrix} onChange={(m) => setPart("matrix", m)} />
           </Card>
 
           <Card style={{ padding: 18 }}>
-            <SectionTitle sub="Configured lookups — will be served by the backend">
-              Categories &amp; Workstreams
-            </SectionTitle>
-            <div style={{ fontSize: 12, color: T.textSec, fontWeight: 600, margin: "6px 0" }}>
-              Project risk categories
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {PROJECT_RISK_CATEGORIES.map(chip)}
-            </div>
-            <div style={{ fontSize: 12, color: T.textSec, fontWeight: 600, margin: "12px 0 6px" }}>
-              Programme risk categories
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {PROGRAM_RISK_CATEGORIES.map(chip)}
-            </div>
-            <div style={{ fontSize: 12, color: T.textSec, fontWeight: 600, margin: "12px 0 6px" }}>
-              Workstreams
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{WORKSTREAMS.map(chip)}</div>
-            <div style={{ fontSize: 12, color: T.textSec, fontWeight: 600, margin: "12px 0 6px" }}>
-              Change categories
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {CHANGE_CATEGORIES.map(chip)}
+            <SectionTitle sub="Used for every monetary value across the app">Currency</SectionTitle>
+            <div style={{ maxWidth: 260 }}>
+              <Field label="Display currency">
+                <Select
+                  value={draft.currency.code}
+                  onChange={(code) => {
+                    const c = CURRENCIES.find((x) => x.code === code);
+                    if (c) setPart("currency", c);
+                  }}
+                  options={CURRENCIES.map((c) => ({
+                    value: c.code,
+                    label: `${c.code} (${c.symbol})`,
+                  }))}
+                />
+              </Field>
             </div>
           </Card>
         </div>
       </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }}>
+        <Card style={{ padding: 18 }}>
+          <LookupListEditor
+            title="Project risk categories"
+            sub="Categories offered for project-scope risks"
+            values={draft.projectRiskCategories}
+            usageCount={usage.projectCategory}
+            onChange={(v) => setPart("projectRiskCategories", v)}
+          />
+        </Card>
+        <Card style={{ padding: 18 }}>
+          <LookupListEditor
+            title="Programme risk categories"
+            sub="Categories offered for programme-scope risks"
+            values={draft.programRiskCategories}
+            usageCount={usage.programCategory}
+            onChange={(v) => setPart("programRiskCategories", v)}
+          />
+        </Card>
+        <Card style={{ padding: 18 }}>
+          <LookupListEditor
+            title="Workstreams"
+            sub="Delivery workstreams for project-scope risks"
+            values={draft.workstreams}
+            usageCount={usage.workstream}
+            onChange={(v) => setPart("workstreams", v)}
+          />
+        </Card>
+        <Card style={{ padding: 18 }}>
+          <LookupListEditor
+            title="Change categories"
+            sub="Categories offered when raising change requests"
+            values={draft.changeCategories}
+            usageCount={usage.changeCategory}
+            onChange={(v) => setPart("changeCategories", v)}
+          />
+        </Card>
+      </div>
+
+      {/* Sticky save bar */}
+      {dirty && (
+        <div
+          style={{
+            position: "sticky",
+            bottom: 0,
+            marginTop: 16,
+            zIndex: 20,
+          }}
+        >
+          <Card
+            style={{
+              padding: "12px 18px",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              boxShadow: T.shadow8,
+              border: `1px solid ${T.brand}55`,
+            }}
+          >
+            <span style={{ fontSize: 13, fontWeight: 600, color: T.text, flex: 1 }}>
+              You have unsaved configuration changes.
+            </span>
+            <Btn
+              variant="subtle"
+              icon={RotateCcw}
+              onClick={() => setDraft(config)}
+              disabled={saving}
+            >
+              Reset
+            </Btn>
+            <Btn variant="primary" icon={Save} onClick={() => void save()} loading={saving}>
+              Save Configuration
+            </Btn>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

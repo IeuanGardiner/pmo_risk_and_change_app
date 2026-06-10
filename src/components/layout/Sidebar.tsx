@@ -10,7 +10,7 @@ import {
 import { NavLink } from "react-router-dom";
 import { T } from "../../theme/tokens";
 import { useAppData } from "../../store/AppData";
-import { HOME_PROJECT } from "../../api/mock/seed";
+import { GlobalSearch } from "../GlobalSearch";
 
 const NAV_SECTIONS = [
   {
@@ -44,8 +44,7 @@ const NAV_SECTIONS = [
 ];
 
 export function Sidebar() {
-  const { user, projects } = useAppData();
-  const project = projects.find((p) => p.id === HOME_PROJECT.id) ?? projects[0];
+  const { user, activeProjects, activeRisks, changes } = useAppData();
 
   return (
     <div
@@ -89,9 +88,11 @@ export function Sidebar() {
           <div style={{ color: "#fff", fontWeight: 700, fontSize: 15, lineHeight: 1.1 }}>
             RiskShield
           </div>
-          <div style={{ fontSize: 11, color: T.textTer }}>Water · AMP8</div>
+          <div style={{ fontSize: 11, color: T.textTer }}>Risk &amp; Change</div>
         </div>
       </div>
+
+      <GlobalSearch />
 
       <div style={{ padding: "0 10px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
         {NAV_SECTIONS.map((section) => (
@@ -144,12 +145,16 @@ export function Sidebar() {
             textTransform: "uppercase",
           }}
         >
-          Project
+          Portfolio
         </div>
         <div style={{ color: "#fff", fontWeight: 600, fontSize: 13.5, marginTop: 4 }}>
-          {project?.name ?? "—"}
+          {activeProjects.length} active {activeProjects.length === 1 ? "project" : "projects"}
         </div>
-        <div style={{ fontSize: 11.5, color: T.textTer }}>{project?.code ?? ""}</div>
+        <div style={{ fontSize: 11.5, color: T.textTer }}>
+          {activeRisks.filter((r) => r.status !== "Closed").length} open risks ·{" "}
+          {changes.filter((c) => c.status !== "Implemented" && c.status !== "Rejected").length}{" "}
+          live changes
+        </div>
       </div>
 
       <div

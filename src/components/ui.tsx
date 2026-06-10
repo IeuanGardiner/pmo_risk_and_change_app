@@ -1,5 +1,12 @@
-import { ChevronDown, type LucideIcon } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+import { ChevronDown, ChevronUp, type LucideIcon } from "lucide-react";
+import {
+  cloneElement,
+  isValidElement,
+  useId,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import {
   CHANGE_STATUS_STYLES,
   LEVEL_STYLES,
@@ -85,6 +92,7 @@ export const Btn = ({
   icon: Icon,
   style,
   disabled,
+  loading,
   title,
 }: {
   children?: ReactNode;
@@ -93,6 +101,8 @@ export const Btn = ({
   icon?: LucideIcon;
   style?: CSSProperties;
   disabled?: boolean;
+  /** Disables the button and shows an inline spinner while a mutation runs. */
+  loading?: boolean;
   title?: string;
 }) => {
   const variants: Record<BtnVariant, CSSProperties> = {
@@ -103,10 +113,11 @@ export const Btn = ({
     danger: { background: T.critical, color: "#fff", border: `1px solid ${T.critical}` },
     success: { background: T.low, color: "#fff", border: `1px solid ${T.low}` },
   };
+  const isDisabled = disabled || loading;
   return (
     <button
       onClick={onClick}
-      disabled={disabled}
+      disabled={isDisabled}
       title={title}
       style={{
         display: "inline-flex",
@@ -117,13 +128,28 @@ export const Btn = ({
         fontSize: 13,
         fontWeight: 600,
         fontFamily: T.font,
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
+        cursor: isDisabled ? "not-allowed" : "pointer",
+        opacity: isDisabled ? 0.55 : 1,
         ...variants[variant],
         ...style,
       }}
     >
-      {Icon && <Icon size={15} />}
+      {loading ? (
+        <span
+          aria-hidden
+          style={{
+            display: "inline-block",
+            width: 12,
+            height: 12,
+            border: "2px solid currentColor",
+            borderRightColor: "transparent",
+            borderRadius: "50%",
+            animation: "rs-spin 0.8s linear infinite",
+          }}
+        />
+      ) : (
+        Icon && <Icon size={15} />
+      )}
       {children}
     </button>
   );
@@ -133,20 +159,36 @@ export const Btn = ({
 export const Field = ({
   label,
   required,
+  error,
   children,
 }: {
   label: string;
   required?: boolean;
+  error?: string;
   children: ReactNode;
-}) => (
-  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-    <label style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>
-      {label}
-      {required && <span style={{ color: T.critical }}> *</span>}
-    </label>
-    {children}
-  </div>
-);
+}) => {
+  const id = useId();
+  const child = isValidElement(children)
+    ? cloneElement(children as ReactElement<{ id?: string; "aria-invalid"?: boolean }>, {
+        id,
+        "aria-invalid": error ? true : undefined,
+      })
+    : children;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      <label htmlFor={id} style={{ fontSize: 12.5, fontWeight: 600, color: T.text }}>
+        {label}
+        {required && <span style={{ color: T.critical }}> *</span>}
+      </label>
+      {child}
+      {error && (
+        <div role="alert" style={{ fontSize: 11.5, color: T.critical, fontWeight: 600 }}>
+          {error}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const inputStyle: CSSProperties = {
   padding: "8px 10px",
@@ -162,13 +204,26 @@ export const inputStyle: CSSProperties = {
 };
 
 export const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
-  <input {...props} style={{ ...inputStyle, ...props.style }} />
+  <input
+    {...props}
+    style={{
+      ...inputStyle,
+      ...(props["aria-invalid"] ? { borderColor: T.critical } : undefined),
+      ...props.style,
+    }}
+  />
 );
 
 export const TextArea = (props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
   <textarea
     {...props}
-    style={{ ...inputStyle, minHeight: 64, resize: "vertical", ...props.style }}
+    style={{
+      ...inputStyle,
+      minHeight: 64,
+      resize: "vertical",
+      ...(props["aria-invalid"] ? { borderColor: T.critical } : undefined),
+      ...props.style,
+    }}
   />
 );
 
@@ -183,21 +238,33 @@ export const Select = ({
   options,
   placeholder,
   disabled,
+  id,
+  "aria-invalid": ariaInvalid,
 }: {
   value: string | number;
   onChange: (value: string) => void;
   options: (SelectOption | string)[];
+  /** When set, an empty "clear" option is offered; omit for required enums. */
   placeholder?: string;
   disabled?: boolean;
+  id?: string;
+  "aria-invalid"?: boolean;
 }) => (
   <div style={{ position: "relative" }}>
     <select
+      id={id}
       value={value}
       disabled={disabled}
+      aria-invalid={ariaInvalid}
       onChange={(e) => onChange(e.target.value)}
-      style={{ ...inputStyle, appearance: "none", paddingRight: 28 }}
+      style={{
+        ...inputStyle,
+        appearance: "none",
+        paddingRight: 28,
+        ...(ariaInvalid ? { borderColor: T.critical } : undefined),
+      }}
     >
-      <option value="">{placeholder || "Select…"}</option>
+      {placeholder !== undefined && <option value="">{placeholder}</option>}
       {options.map((o) => {
         const opt = typeof o === "string" ? { value: o, label: o } : o;
         return (
@@ -213,6 +280,96 @@ export const Select = ({
     />
   </div>
 );
+
+/* ---- Tables ----------------------------------------------------------------- */
+export const SortableTh = ({
+  label,
+  active,
+  dir,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  dir: "asc" | "desc";
+  onClick: () => void;
+}) => (
+  <th
+    aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
+    style={{ padding: 0, textAlign: "left" }}
+  >
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 3,
+        width: "100%",
+        padding: "10px 14px",
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        fontFamily: T.font,
+        fontSize: 11,
+        fontWeight: 600,
+        textTransform: "uppercase",
+        letterSpacing: 0.4,
+        color: active ? T.brand : "inherit",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+      {active && (dir === "asc" ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+    </button>
+  </th>
+);
+
+export const Pagination = ({
+  page,
+  pageCount,
+  total,
+  pageSize,
+  onPage,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  pageSize: number;
+  onPage: (p: number) => void;
+}) => {
+  if (total === 0) return null;
+  const from = page * pageSize + 1;
+  const to = Math.min((page + 1) * pageSize, total);
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "10px 16px",
+        borderTop: `1px solid ${T.strokeSubtle}`,
+        fontSize: 12.5,
+        color: T.textSec,
+      }}
+    >
+      <span>
+        Showing {from}–{to} of {total}
+      </span>
+      {pageCount > 1 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Btn variant="subtle" disabled={page === 0} onClick={() => onPage(page - 1)}>
+            Previous
+          </Btn>
+          <span style={{ fontWeight: 600 }}>
+            Page {page + 1} of {pageCount}
+          </span>
+          <Btn variant="subtle" disabled={page >= pageCount - 1} onClick={() => onPage(page + 1)}>
+            Next
+          </Btn>
+        </div>
+      )}
+    </div>
+  );
+};
 
 /* ---- Page scaffolding ---------------------------------------------------------- */
 export const PageHeader = ({
@@ -259,8 +416,11 @@ export const Divider = () => (
   <div style={{ height: 1, background: T.strokeSubtle, margin: "22px 0" }} />
 );
 
-export const EmptyState = ({ children }: { children: ReactNode }) => (
-  <div style={{ padding: 40, textAlign: "center", color: T.textTer, fontSize: 13 }}>{children}</div>
+export const EmptyState = ({ children, action }: { children: ReactNode; action?: ReactNode }) => (
+  <div style={{ padding: 40, textAlign: "center", color: T.textTer, fontSize: 13 }}>
+    {children}
+    {action && <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>{action}</div>}
+  </div>
 );
 
 /* ---- Loading spinner --------------------------------------------------------- */
