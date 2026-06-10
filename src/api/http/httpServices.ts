@@ -1,11 +1,13 @@
+import type { AppConfig } from "../../types/config";
+import type { AppUser, ChangeRequest, Project, Risk } from "../../types/domain";
 import type {
-  AppUser,
-  ChangeRequest,
-  Project,
-  RegulatoryPeriod,
-  Risk,
-} from "../../types/domain";
-import type { ChangeService, ReferenceService, RiskService, Services } from "../services";
+  ChangeService,
+  ConfigService,
+  ProjectService,
+  ReferenceService,
+  RiskService,
+  Services,
+} from "../services";
 
 /* ============================================================================
    HTTP implementation — talks to the real backend. Activated by setting
@@ -38,6 +40,10 @@ export function createHttpServices(baseUrl: string): Services {
         body: JSON.stringify(patch),
       }),
     close: (ref) => api<Risk>(`/api/risks/${encodeURIComponent(ref)}/close`, { method: "POST" }),
+    archive: (ref) =>
+      api<Risk>(`/api/risks/${encodeURIComponent(ref)}/archive`, { method: "POST" }),
+    restore: (ref) =>
+      api<Risk>(`/api/risks/${encodeURIComponent(ref)}/restore`, { method: "POST" }),
   };
 
   const changes: ChangeService = {
@@ -55,13 +61,33 @@ export function createHttpServices(baseUrl: string): Services {
         method: "POST",
         body: JSON.stringify({ action, note }),
       }),
+    delete: (ref) =>
+      api<void>(`/api/changes/${encodeURIComponent(ref)}`, { method: "DELETE" }),
+  };
+
+  const projects: ProjectService = {
+    list: () => api<Project[]>("/api/projects"),
+    create: (input) =>
+      api<Project>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
+    update: (id, patch) =>
+      api<Project>(`/api/projects/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    archive: (id) =>
+      api<Project>(`/api/projects/${encodeURIComponent(id)}/archive`, { method: "POST" }),
+    restore: (id) =>
+      api<Project>(`/api/projects/${encodeURIComponent(id)}/restore`, { method: "POST" }),
+  };
+
+  const config: ConfigService = {
+    get: () => api<AppConfig>("/api/config"),
+    update: (next) => api<AppConfig>("/api/config", { method: "PUT", body: JSON.stringify(next) }),
   };
 
   const reference: ReferenceService = {
-    projects: () => api<Project[]>("/api/projects"),
-    regulatoryPeriods: () => api<RegulatoryPeriod[]>("/api/regulatory-periods"),
     currentUser: () => api<AppUser>("/api/me"),
   };
 
-  return { risks, changes, reference };
+  return { risks, changes, projects, config, reference };
 }

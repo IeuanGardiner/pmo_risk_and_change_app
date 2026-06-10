@@ -1,17 +1,21 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import {
   Btn, Card, ChangeStatusPill, EmptyState, Input, PageHeader, Pill, PriorityText, SectionTitle,
 } from "../../components/ui";
+import { usePageTitle } from "../../hooks/usePageTitle";
+import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { CHANGE_STATUS_STYLES, T } from "../../theme/tokens";
 import type { ChangeTransitionAction } from "../../types/domain";
-import { PERIOD_MONTHS } from "../../types/lookups";
-import { formatDate, formatDateTime, gbp, gbpFull, scheduleDays } from "../../utils/format";
+import { profileRangeLabel } from "../../utils/calendar";
+import { profileSeries } from "../../utils/chartData";
+import { formatDate, formatDateTime, money, moneyFull, scheduleDays } from "../../utils/format";
 
 /** Workflow actions offered for each status. */
 const ACTIONS_BY_STATUS: Record<string, { action: ChangeTransitionAction; label: string; variant: "primary" | "dark" | "danger" | "success" }[]> = {
@@ -33,18 +37,18 @@ const ACTIONS_BY_STATUS: Record<string, { action: ChangeTransitionAction; label:
 export function ChangeDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
-  const { changes, risks, projects, transitionChange } = useAppData();
+  const { changes, risks, projects, transitionChange, deleteChange } = useAppData();
+  const toast = useToast();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const change = changes.find((c) => c.changeReference === ref);
+  usePageTitle(change ? `Change ${change.changeReference}` : "Change not found");
 
   const profileData = useMemo(
-    () =>
-      change
-        ? PERIOD_MONTHS.map((m, i) => ({ m, v: change.costProfile.periods[i] ?? 0 }))
-        : [],
+    () => (change ? profileSeries(change.costProfile) : []),
     [change],
   );
 
@@ -69,14 +73,27 @@ export function ChangeDetail() {
 
   const run = async (action: ChangeTransitionAction) => {
     setBusy(true);
-    setError(null);
     try {
-      await transitionChange(change.changeReference, action, note.trim() || undefined);
+      const rec = await transitionChange(change.changeReference, action, note.trim() || undefined);
       setNote("");
+      toast.success(`${rec.changeReference} moved to "${rec.status}"`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Action failed");
+      toast.error(e instanceof Error ? e.message : "Workflow action failed");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteChange(change.changeReference);
+      toast.success(`Draft ${change.changeReference} deleted`);
+      navigate("/changes");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -88,14 +105,24 @@ export function ChangeDetail() {
     ["Raised By", change.raisedBy],
     ["Owner", change.owner],
     ["Project", project ? `${project.name} (${project.code})` : "— Programme —"],
-    ["Regulatory Period", change.regulatoryPeriod],
     ["Required By", formatDate(change.requiredBy)],
-    ["Cost Impact", gbpFull(change.costImpact)],
+    ["Cost Impact", moneyFull(change.costImpact)],
+    ["Cost Profile", profileRangeLabel(change.costProfile)],
     ["Schedule Impact", scheduleDays(change.scheduleImpactDays)],
   ];
 
   return (
     <div style={{ padding: 24, overflow: "auto" }}>
+      <ConfirmDialog
+        open={confirmDelete}
+        title={`Delete draft ${change.changeReference}?`}
+        message="This permanently removes the draft change request and unlinks it from any risks. This cannot be undone."
+        confirmLabel="Delete Draft"
+        busy={deleting}
+        onConfirm={() => void onDelete()}
+        onCancel={() => setConfirmDelete(false)}
+      />
+
       <PageHeader
         title={`Change Detail – ${change.changeReference}`}
         action={
@@ -110,6 +137,11 @@ export function ChangeDetail() {
             >
               Edit
             </Btn>
+            {change.status === "Draft" && (
+              <Btn variant="danger" icon={Trash2} onClick={() => setConfirmDelete(true)}>
+                Delete Draft
+              </Btn>
+            )}
           </div>
         }
       />
@@ -137,19 +169,17 @@ export function ChangeDetail() {
             <div style={{ flex: 1, minWidth: 220 }}>
               <Input
                 placeholder="Decision note (optional)…"
+                aria-label="Decision note"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
             </div>
             {actions.map((a) => (
-              <Btn key={a.action} variant={a.variant} onClick={() => run(a.action)} disabled={busy}>
+              <Btn key={a.action} variant={a.variant} onClick={() => void run(a.action)} loading={busy}>
                 {a.label}
               </Btn>
             ))}
           </div>
-          {error && (
-            <div style={{ fontSize: 12, color: T.critical, marginTop: 8 }}>{error}</div>
-          )}
         </Card>
       )}
 
@@ -246,7 +276,7 @@ export function ChangeDetail() {
                 >
                   <span style={{ color: T.textTer, fontWeight: 600 }}>{r.riskReference}</span>
                   <span style={{ fontWeight: 600, color: T.text, flex: 1 }}>{r.title}</span>
-                  <span style={{ color: T.textSec, fontWeight: 600 }}>{gbp(r.estimatedTotal)}</span>
+                  <span style={{ color: T.textSec, fontWeight: 600 }}>{money(r.estimatedTotal)}</span>
                   <Pill level={r.level} small />
                 </div>
               ))
@@ -254,13 +284,22 @@ export function ChangeDetail() {
           </Card>
 
           <Card style={{ padding: 18 }}>
-            <SectionTitle sub="Cost impact spread across the period">Cost Impact Profile</SectionTitle>
+            <SectionTitle sub={`Cost impact spread · ${profileRangeLabel(change.costProfile)}`}>
+              Cost Impact Profile
+            </SectionTitle>
             <ResponsiveContainer width="100%" height={170}>
               <BarChart data={profileData}>
                 <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
-                <XAxis dataKey="m" tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => gbp(v)} />
-                <Tooltip formatter={(v: number) => gbpFull(v)} />
+                <XAxis
+                  dataKey="m"
+                  tick={{ fontSize: 11, fill: T.textTer }}
+                  axisLine={false}
+                  tickLine={false}
+                  minTickGap={20}
+                  interval="preserveStartEnd"
+                />
+                <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => money(v)} />
+                <Tooltip formatter={(v: number) => moneyFull(v)} />
                 <Bar dataKey="v" name="Cost impact" fill={T.brand} radius={[3, 3, 0, 0]} barSize={18} />
               </BarChart>
             </ResponsiveContainer>

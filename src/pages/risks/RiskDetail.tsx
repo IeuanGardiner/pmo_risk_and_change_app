@@ -1,33 +1,37 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Pencil } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowLeft, CheckCircle2, Pencil } from "lucide-react";
 import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import {
   Btn, Card, ChangeStatusPill, EmptyState, PageHeader, Pill, SectionTitle,
 } from "../../components/ui";
+import { usePageTitle } from "../../hooks/usePageTitle";
+import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { LEVEL_STYLES, T } from "../../theme/tokens";
-import { IMPACTS, LIKELIHOODS, PERIOD_MONTHS } from "../../types/lookups";
-import { formatDate, formatDateTime, gbp, gbpFull } from "../../utils/format";
+import { IMPACTS, LIKELIHOODS } from "../../types/lookups";
+import { profileRangeLabel } from "../../utils/calendar";
+import { riskDrawdown } from "../../utils/chartData";
+import {
+  currencySymbol, formatDate, formatDateTime, isOverdue, money, moneyFull,
+} from "../../utils/format";
 
 export function RiskDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
-  const { risks, changes, projects, closeRisk } = useAppData();
+  const { risks, changes, projects, closeRisk, archiveRisk, restoreRisk } = useAppData();
+  const toast = useToast();
   const [closing, setClosing] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
 
   const risk = risks.find((r) => r.riskReference === ref);
+  usePageTitle(risk ? `Risk ${risk.riskReference}` : "Risk not found");
 
-  const profile = useMemo(() => {
-    if (!risk) return [];
-    let remaining = risk.estimatedTotal;
-    return PERIOD_MONTHS.map((m, i) => {
-      remaining -= risk.costProfile.periods[i] ?? 0;
-      return { m, est: Math.max(remaining, 0) / 1e6 };
-    });
-  }, [risk]);
+  const profile = useMemo(() => (risk ? riskDrawdown(risk) : []), [risk]);
 
   if (!risk) {
     return (
@@ -46,6 +50,7 @@ export function RiskDetail() {
   const s = LEVEL_STYLES[risk.level];
   const linkedChanges = changes.filter((c) => risk.linkedChangeRefs.includes(c.changeReference));
   const project = projects.find((p) => p.id === risk.projectId);
+  const reviewOverdue = risk.status !== "Closed" && isOverdue(risk.nextReviewDate);
 
   const detailRows: [string, string][] = [
     ["Category", risk.category],
@@ -56,21 +61,60 @@ export function RiskDetail() {
     ["Risk Score", `${risk.score} / 25`],
     ["Status", risk.status],
     ["Project", project ? `${project.name} (${project.code})` : "— Programme —"],
-    ["Regulatory Period", risk.regulatoryPeriod],
+    ["Cost Profile", profileRangeLabel(risk.costProfile)],
     ["Target Resolution", formatDate(risk.targetDate)],
+    ["Next Review", `${formatDate(risk.nextReviewDate)}${reviewOverdue ? " — overdue" : ""}`],
   ];
 
   const onClose = async () => {
     setClosing(true);
     try {
       await closeRisk(risk.riskReference);
+      toast.success(`${risk.riskReference} closed`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Close failed");
     } finally {
       setClosing(false);
     }
   };
 
+  const onArchive = async () => {
+    setArchiving(true);
+    try {
+      await archiveRisk(risk.riskReference);
+      toast.success(`${risk.riskReference} archived — restore it any time from the register`);
+      setConfirmArchive(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Archive failed");
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const onRestore = async () => {
+    setArchiving(true);
+    try {
+      await restoreRisk(risk.riskReference);
+      toast.success(`${risk.riskReference} restored`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Restore failed");
+    } finally {
+      setArchiving(false);
+    }
+  };
+
   return (
     <div style={{ padding: 24, overflow: "auto" }}>
+      <ConfirmDialog
+        open={confirmArchive}
+        title={`Archive ${risk.riskReference}?`}
+        message="Archived risks are hidden from dashboards and the default register view, but keep their full history and can be restored at any time."
+        confirmLabel="Archive Risk"
+        busy={archiving}
+        onConfirm={() => void onArchive()}
+        onCancel={() => setConfirmArchive(false)}
+      />
+
       <PageHeader
         title={`Risk Detail – ${risk.riskReference}`}
         action={
@@ -78,21 +122,51 @@ export function RiskDetail() {
             <Btn variant="default" icon={ArrowLeft} onClick={() => navigate("/risks")}>
               Back
             </Btn>
-            <Btn
-              variant="default"
-              icon={Pencil}
-              onClick={() => navigate(`/risks/${risk.riskReference}/edit`)}
-            >
-              Edit
-            </Btn>
-            {risk.status !== "Closed" && (
-              <Btn variant="dark" icon={CheckCircle2} onClick={onClose} disabled={closing}>
-                {closing ? "Closing…" : "Close Risk"}
+            {risk.archived ? (
+              <Btn variant="dark" icon={ArchiveRestore} onClick={() => void onRestore()} loading={archiving}>
+                Restore
               </Btn>
+            ) : (
+              <>
+                <Btn
+                  variant="default"
+                  icon={Pencil}
+                  onClick={() => navigate(`/risks/${risk.riskReference}/edit`)}
+                >
+                  Edit
+                </Btn>
+                <Btn variant="default" icon={Archive} onClick={() => setConfirmArchive(true)}>
+                  Archive
+                </Btn>
+                {risk.status !== "Closed" && (
+                  <Btn variant="dark" icon={CheckCircle2} onClick={() => void onClose()} loading={closing}>
+                    Close Risk
+                  </Btn>
+                )}
+              </>
             )}
           </div>
         }
       />
+
+      {risk.archived && (
+        <Card
+          style={{
+            padding: 14,
+            marginBottom: 16,
+            background: T.bg,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <Archive size={16} style={{ color: T.textTer }} />
+          <span style={{ fontSize: 13, color: T.textSec }}>
+            This risk is <strong>archived</strong> — it is excluded from dashboards, charts and the
+            default register view.
+          </span>
+        </Card>
+      )}
 
       {/* Banner */}
       <Card style={{ padding: 16, borderLeft: `4px solid ${s.c}`, background: s.bg, marginBottom: 16 }}>
@@ -125,7 +199,15 @@ export function RiskDetail() {
               }}
             >
               <span style={{ color: T.textSec, flexShrink: 0 }}>{k}</span>
-              <span style={{ fontWeight: 600, color: T.text, textAlign: "right" }}>{v}</span>
+              <span
+                style={{
+                  fontWeight: 600,
+                  color: k === "Next Review" && reviewOverdue ? T.critical : T.text,
+                  textAlign: "right",
+                }}
+              >
+                {v}
+              </span>
             </div>
           ))}
         </Card>
@@ -169,7 +251,7 @@ export function RiskDetail() {
                 >
                   <span style={{ color: T.textTer, fontWeight: 600 }}>{c.changeReference}</span>
                   <span style={{ fontWeight: 600, color: T.text, flex: 1 }}>{c.title}</span>
-                  <span style={{ color: T.textSec, fontWeight: 600 }}>{gbp(c.costImpact)}</span>
+                  <span style={{ color: T.textSec, fontWeight: 600 }}>{money(c.costImpact)}</span>
                   <ChangeStatusPill status={c.status} small />
                 </div>
               ))
@@ -179,7 +261,9 @@ export function RiskDetail() {
       </div>
 
       <Card style={{ padding: 18 }}>
-        <SectionTitle sub="Estimated exposure drawdown across the period">Cost Profile</SectionTitle>
+        <SectionTitle sub={`Estimated exposure drawdown · ${profileRangeLabel(risk.costProfile)}`}>
+          Cost Profile
+        </SectionTitle>
         <div style={{ display: "flex", gap: 24, marginBottom: 10 }}>
           {([
             ["Estimated", risk.estimatedTotal, T.brand],
@@ -188,20 +272,27 @@ export function RiskDetail() {
           ] as const).map(([l, v, c]) => (
             <div key={l}>
               <div style={{ fontSize: 11.5, color: T.textSec }}>{l}</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: c }}>{gbpFull(v)}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: c }}>{moneyFull(v)}</div>
             </div>
           ))}
         </div>
         <ResponsiveContainer width="100%" height={190}>
           <LineChart data={profile}>
             <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
-            <XAxis dataKey="m" tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} />
+            <XAxis
+              dataKey="m"
+              tick={{ fontSize: 11, fill: T.textTer }}
+              axisLine={false}
+              tickLine={false}
+              minTickGap={20}
+              interval="preserveStartEnd"
+            />
             <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={28} />
-            <Tooltip formatter={(v: number) => `£${v.toFixed(2)}m`} />
+            <Tooltip formatter={(v: number) => `${currencySymbol()}${v.toFixed(2)}m`} />
             <Line
               type="monotone"
               dataKey="est"
-              name="Estimated (£m)"
+              name={`Estimated (${currencySymbol()}m)`}
               stroke={T.brand}
               strokeWidth={2.4}
               dot={{ r: 2.5 }}

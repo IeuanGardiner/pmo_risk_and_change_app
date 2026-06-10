@@ -1,10 +1,11 @@
+import type { AppConfig } from "../types/config";
 import type {
   AppUser,
   ChangeInput,
   ChangeRequest,
   ChangeTransitionAction,
   Project,
-  RegulatoryPeriod,
+  ProjectInput,
   Risk,
   RiskInput,
 } from "../types/domain";
@@ -17,11 +18,14 @@ import type {
    ========================================================================== */
 
 export interface RiskService {
+  /** All risks, including archived ones. */
   list(): Promise<Risk[]>;
   get(ref: string): Promise<Risk | null>;
   create(input: RiskInput): Promise<Risk>;
   update(ref: string, patch: Partial<RiskInput>): Promise<Risk>;
   close(ref: string): Promise<Risk>;
+  archive(ref: string): Promise<Risk>;
+  restore(ref: string): Promise<Risk>;
 }
 
 export interface ChangeService {
@@ -31,16 +35,34 @@ export interface ChangeService {
   update(ref: string, patch: Partial<ChangeInput>): Promise<ChangeRequest>;
   /** Moves the change through its workflow (submit, approve, reject…). */
   transition(ref: string, action: ChangeTransitionAction, note?: string): Promise<ChangeRequest>;
+  /** Permanently removes a change. Only Draft changes may be deleted. */
+  delete(ref: string): Promise<void>;
+}
+
+export interface ProjectService {
+  /** All projects, including archived ones. */
+  list(): Promise<Project[]>;
+  create(input: ProjectInput): Promise<Project>;
+  update(id: string, patch: Partial<ProjectInput>): Promise<Project>;
+  archive(id: string): Promise<Project>;
+  restore(id: string): Promise<Project>;
+}
+
+export interface ConfigService {
+  get(): Promise<AppConfig>;
+  /** Replaces the configuration. The server must recompute stored risk levels
+      when the matrix changes. */
+  update(config: AppConfig): Promise<AppConfig>;
 }
 
 export interface ReferenceService {
-  projects(): Promise<Project[]>;
-  regulatoryPeriods(): Promise<RegulatoryPeriod[]>;
   currentUser(): Promise<AppUser>;
 }
 
 export interface Services {
   risks: RiskService;
   changes: ChangeService;
+  projects: ProjectService;
+  config: ConfigService;
   reference: ReferenceService;
 }

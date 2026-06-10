@@ -1,20 +1,24 @@
 import { LEVEL_STYLES, T } from "../theme/tokens";
+import type { MatrixGrid } from "../types/config";
 import type { Rating, Risk } from "../types/domain";
-import { GRID, IMPACTS, LIKELIHOODS, RISK_LEVELS } from "../types/lookups";
+import { IMPACTS, LIKELIHOODS, RISK_LEVELS } from "../types/lookups";
 
 const RATINGS: Rating[] = [1, 2, 3, 4, 5];
 const RATINGS_DESC: Rating[] = [5, 4, 3, 2, 1];
 
-/** Interactive 5×5 risk matrix — click a bubble to open the risk. */
+/** Interactive 5×5 risk matrix — each populated cell shows how many risks sit
+    in that band; clicking it opens the register filtered to that cell. */
 export function RiskMatrix({
   risks,
-  onPick,
+  grid,
+  onPickCell,
 }: {
   risks: Risk[];
-  onPick: (ref: string) => void;
+  grid: MatrixGrid;
+  onPickCell?: (likelihood: Rating, impact: Rating) => void;
 }) {
-  const cell = (impact: Rating, likelihood: Rating) =>
-    risks.filter((r) => r.impact === impact && r.likelihood === likelihood);
+  const countAt = (impact: Rating, likelihood: Rating) =>
+    risks.filter((r) => r.impact === impact && r.likelihood === likelihood).length;
 
   return (
     <div style={{ display: "flex", gap: 8 }}>
@@ -50,9 +54,9 @@ export function RiskMatrix({
               {IMPACTS[impact]}
             </div>
             {RATINGS.map((likelihood) => {
-              const level = GRID[impact][likelihood];
+              const level = grid[impact][likelihood];
               const s = LEVEL_STYLES[level];
-              const items = cell(impact, likelihood);
+              const count = countAt(impact, likelihood);
               return (
                 <div
                   key={likelihood}
@@ -62,36 +66,33 @@ export function RiskMatrix({
                     background: s.bg,
                     border: `1.5px solid ${s.c}`,
                     borderRadius: 5,
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 3,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: 3,
+                    display: "grid",
+                    placeItems: "center",
                   }}
                 >
-                  {items.map((r) => (
-                    <div
-                      key={r.riskReference}
-                      title={`${r.riskReference} — ${r.title}`}
-                      onClick={() => onPick(r.riskReference)}
+                  {count > 0 && (
+                    <button
+                      onClick={() => onPickCell?.(likelihood, impact)}
+                      title={`${count} risk${count === 1 ? "" : "s"} — open in register`}
+                      aria-label={`${count} risk${count === 1 ? "" : "s"} at likelihood ${likelihood}, impact ${impact}`}
                       style={{
-                        width: 24,
-                        height: 24,
+                        width: 30,
+                        height: 30,
                         borderRadius: "50%",
                         background: s.c,
                         color: "#fff",
-                        fontSize: 9.5,
+                        fontSize: 12.5,
                         fontWeight: 700,
+                        fontFamily: T.font,
                         display: "grid",
                         placeItems: "center",
-                        cursor: "pointer",
+                        cursor: onPickCell ? "pointer" : "default",
                         border: "1.5px solid #fff",
                       }}
                     >
-                      {r.riskReference.replace(/^R0?/, "R")}
-                    </div>
-                  ))}
+                      {count}
+                    </button>
+                  )}
                 </div>
               );
             })}
