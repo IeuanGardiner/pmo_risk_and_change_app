@@ -57,6 +57,7 @@ interface AppDataValue {
   ) => Promise<ChangeRequest>;
   deleteChange: (ref: string) => Promise<void>;
   updateConfig: (next: AppConfig) => Promise<AppConfig>;
+  uploadLogo: (file: File) => Promise<{ url: string }>;
   createProject: (input: ProjectInput) => Promise<Project>;
   updateProject: (id: string, patch: Partial<ProjectInput>) => Promise<Project>;
   archiveProject: (id: string) => Promise<Project>;
@@ -203,6 +204,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         await refreshRisks();
         return cfg;
       },
+      uploadLogo: (file) => services.config.uploadLogo(file),
       createProject: async (input) => {
         const rec = await services.projects.create(input);
         upsertProject(rec);

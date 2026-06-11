@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  alpha,
   CHANGE_STATUS_STYLES,
   LEVEL_STYLES,
   PRIORITY_COLORS,
@@ -39,7 +40,7 @@ export const Pill = ({ level, small }: { level: RiskLevel; small?: boolean }) =>
       style={{
         color: s.c,
         background: s.bg,
-        border: `1px solid ${s.c}33`,
+        border: `1px solid ${alpha(s.c, 20)}`,
         borderRadius: 4,
         padding: small ? "1px 7px" : "3px 9px",
         fontSize: small ? 11 : 12,
@@ -64,7 +65,7 @@ export const ChangeStatusPill = ({ status, small }: { status: ChangeStatus; smal
       style={{
         color: s.c,
         background: s.bg,
-        border: `1px solid ${s.c}33`,
+        border: `1px solid ${alpha(s.c, 20)}`,
         borderRadius: 4,
         padding: small ? "1px 7px" : "3px 9px",
         fontSize: small ? 11 : 12,

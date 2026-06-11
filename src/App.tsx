@@ -18,15 +18,20 @@ import { AddRisk, EditRisk } from "./pages/risks/RiskForm";
 import { RiskRegister } from "./pages/risks/RiskRegister";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 import { AppDataProvider, useAppData } from "./store/AppData";
+import { ThemeProvider } from "./theme/ThemeProvider";
 import { T } from "./theme/tokens";
 import type { Permission } from "./types/auth";
 
 function Shell() {
-  const { loading, error, refresh } = useAppData();
+  const { loading, error, refresh, config } = useAppData();
   const location = useLocation();
 
   if (loading || error) {
-    return <Landing error={error} onRetry={() => void refresh()} />;
+    return (
+      <ThemeProvider branding={config.branding}>
+        <Landing error={error} onRetry={() => void refresh()} />
+      </ThemeProvider>
+    );
   }
 
   /** Permission-gated route element. */
@@ -35,6 +40,7 @@ function Shell() {
   );
 
   return (
+    <ThemeProvider branding={config.branding}>
     <div
       style={{
         display: "flex",
@@ -78,6 +84,7 @@ function Shell() {
         </div>
       </div>
     </div>
+    </ThemeProvider>
   );
 }
 

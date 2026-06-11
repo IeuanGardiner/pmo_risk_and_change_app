@@ -15,6 +15,28 @@ export interface CurrencyConfig {
   symbol: string;
 }
 
+/** Which colour scheme to boot into. "system" follows the OS preference. */
+export type ThemeMode = "light" | "dark" | "system";
+
+/* ----------------------------------------------------------------------------
+   White-label branding — lets each deployment present as the client's own
+   product (name, strapline, logo and accent colour) without code changes.
+   `logoUrl` may be an absolute/relative URL served by the backend or a data:
+   URL (mock mode persists the uploaded image straight into localStorage).
+   -------------------------------------------------------------------------- */
+export interface BrandingConfig {
+  /** Product name shown in the sidebar, splash screen and browser tab. */
+  appName: string;
+  /** Short strapline under the product name. */
+  tagline: string;
+  /** Primary accent colour (hex). Light/dark shades are derived from it. */
+  brandColor: string;
+  /** Uploaded logo (backend URL or data: URL); null falls back to the mark. */
+  logoUrl: string | null;
+  /** Colour scheme a fresh browser starts in before the user overrides it. */
+  defaultTheme: ThemeMode;
+}
+
 export interface AppConfig {
   projectRiskCategories: string[];
   programRiskCategories: string[];
@@ -24,10 +46,43 @@ export interface AppConfig {
   riskStatuses: string[];
   matrix: MatrixGrid;
   currency: CurrencyConfig;
+  branding: BrandingConfig;
 }
 
 /** Statuses the workflow depends on and that admins cannot remove. */
 export const SYSTEM_RISK_STATUSES = ["Open", "Closed"];
+
+/** Curated accent presets offered in Settings (label + hex). */
+export const BRAND_PRESETS: { label: string; value: string }[] = [
+  { label: "Azure", value: "#0F6CBD" },
+  { label: "Indigo", value: "#4F46E5" },
+  { label: "Violet", value: "#7C3AED" },
+  { label: "Teal", value: "#0D9488" },
+  { label: "Emerald", value: "#059669" },
+  { label: "Amber", value: "#D97706" },
+  { label: "Rose", value: "#E11D48" },
+  { label: "Slate", value: "#475569" },
+];
+
+export const DEFAULT_BRANDING: BrandingConfig = {
+  appName: "RiskShield",
+  tagline: "Risk & Change",
+  brandColor: "#0F6CBD",
+  logoUrl: null,
+  defaultTheme: "light",
+};
+
+const THEME_MODES: ThemeMode[] = ["light", "dark", "system"];
+/** Accepts #rgb / #rrggbb (with or without leading #) so the colour input and
+    any backend payload are both tolerated. */
+const HEX_RE = /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
+const normalizeHex = (v: unknown, fallback: string): string => {
+  if (typeof v === "string" && HEX_RE.test(v.trim())) {
+    const h = v.trim();
+    return h.startsWith("#") ? h : `#${h}`;
+  }
+  return fallback;
+};
 
 export const CURRENCIES: CurrencyConfig[] = [
   { code: "GBP", symbol: "£" },
@@ -77,6 +132,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   riskStatuses: ["Open", "Closed"],
   matrix: DEFAULT_MATRIX,
   currency: CURRENCIES[0],
+  branding: DEFAULT_BRANDING,
 };
 
 const VALID_LEVELS: RiskLevel[] = ["Critical", "High", "Medium", "Low"];
@@ -125,6 +181,37 @@ function sanitizeCurrency(raw: unknown): CurrencyConfig {
   return clone(DEFAULT_CONFIG.currency);
 }
 
+/** A short, safe string (trimmed, length-capped) or the fallback. */
+function sanitizeText(raw: unknown, fallback: string, max = 60): string {
+  if (typeof raw === "string" && raw.trim()) return raw.trim().slice(0, max);
+  return fallback;
+}
+
+/** Accept http(s)/relative/data image URLs only; anything else (incl. js:)
+    is dropped so a hostile payload can't inject a non-image src. */
+function sanitizeLogoUrl(raw: unknown): string | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  const v = raw.trim();
+  if (/^data:image\//i.test(v)) return v;
+  if (/^https?:\/\//i.test(v)) return v;
+  if (v.startsWith("/")) return v;
+  return null;
+}
+
+export function sanitizeBranding(raw: unknown): BrandingConfig {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  const defaultTheme = THEME_MODES.includes(r.defaultTheme as ThemeMode)
+    ? (r.defaultTheme as ThemeMode)
+    : DEFAULT_BRANDING.defaultTheme;
+  return {
+    appName: sanitizeText(r.appName, DEFAULT_BRANDING.appName),
+    tagline: sanitizeText(r.tagline, DEFAULT_BRANDING.tagline),
+    brandColor: normalizeHex(r.brandColor, DEFAULT_BRANDING.brandColor),
+    logoUrl: sanitizeLogoUrl(r.logoUrl),
+    defaultTheme,
+  };
+}
+
 /** Deep-validate an untrusted payload (localStorage / API), merging anything
     malformed back to the defaults so the app never boots with broken config. */
 export function sanitizeConfig(raw: unknown): AppConfig {
@@ -145,5 +232,6 @@ export function sanitizeConfig(raw: unknown): AppConfig {
     riskStatuses: sanitizeStatuses(r.riskStatuses),
     matrix: sanitizeMatrix(r.matrix),
     currency: sanitizeCurrency(r.currency),
+    branding: sanitizeBranding(r.branding),
   };
 }

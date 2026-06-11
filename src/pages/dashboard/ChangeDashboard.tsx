@@ -9,16 +9,29 @@ import {
 } from "../../components/ui";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useAppData } from "../../store/AppData";
-import { CHANGE_STATUS_STYLES, T } from "../../theme/tokens";
-import type { ChangeRequest } from "../../types/domain";
+import { useTheme } from "../../theme/ThemeProvider";
+import { T } from "../../theme/tokens";
+import type { ChangeRequest, ChangeStatus } from "../../types/domain";
 import { CHANGE_STATUSES } from "../../types/lookups";
 import { costByCategory, countByMonth } from "../../utils/chartData";
 import { currencySymbol, formatDateTime, money, scheduleDays } from "../../utils/format";
 
 export function ChangeDashboard() {
   const { changes } = useAppData();
+  const colors = useTheme().chartColors;
   const navigate = useNavigate();
   usePageTitle("Change Dashboard");
+
+  // Resolved fills for the pipeline bars, mirroring CHANGE_STATUS_STYLES (which
+  // can't be used directly — its var() colours don't resolve in SVG fills).
+  const statusFill: Record<ChangeStatus, string> = {
+    Draft: colors.textSec,
+    Submitted: colors.brand,
+    "Under Review": colors.purple,
+    Approved: colors.low,
+    Rejected: colors.critical,
+    Implemented: colors.teal,
+  };
 
   const lastUpdated = changes.reduce((a, c) => (c.updatedAt > a ? c.updatedAt : a), "");
 
@@ -37,11 +50,7 @@ export function ChangeDashboard() {
         { label: "Implemented", n: byStatus("Implemented"), sub: "Delivered changes", c: T.teal },
         { label: "Rejected", n: byStatus("Rejected"), sub: "Not progressed", c: T.critical },
       ],
-      pipeline: CHANGE_STATUSES.map((s) => ({
-        name: s,
-        value: byStatus(s),
-        fill: CHANGE_STATUS_STYLES[s].c,
-      })),
+      pipeline: CHANGE_STATUSES.map((s) => ({ name: s, value: byStatus(s) })),
     };
   }, [changes]);
 
@@ -117,13 +126,13 @@ export function ChangeDashboard() {
           <SectionTitle sub="Where every change sits in the workflow">Change Pipeline</SectionTitle>
           <ResponsiveContainer width="100%" height={210}>
             <BarChart data={pipeline} layout="vertical" margin={{ left: 30 }}>
-              <CartesianGrid horizontal={false} stroke={T.strokeSubtle} />
-              <XAxis type="number" tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: T.textSec }} axisLine={false} tickLine={false} width={86} />
+              <CartesianGrid horizontal={false} stroke={colors.strokeSubtle} />
+              <XAxis type="number" tick={{ fontSize: 11, fill: colors.textTer }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: colors.textSec }} axisLine={false} tickLine={false} width={86} />
               <Tooltip />
               <Bar dataKey="value" name="Changes" radius={[0, 3, 3, 0]} barSize={16}>
                 {pipeline.map((e, i) => (
-                  <Cell key={i} fill={e.fill} />
+                  <Cell key={i} fill={statusFill[e.name]} />
                 ))}
               </Bar>
             </BarChart>
@@ -133,11 +142,11 @@ export function ChangeDashboard() {
           </div>
           <ResponsiveContainer width="100%" height={110}>
             <BarChart data={raisedByMonth}>
-              <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
-              <XAxis dataKey="m" tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={20} allowDecimals={false} />
+              <CartesianGrid vertical={false} stroke={colors.strokeSubtle} />
+              <XAxis dataKey="m" tick={{ fontSize: 11, fill: colors.textTer }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: colors.textTer }} axisLine={false} tickLine={false} width={20} allowDecimals={false} />
               <Tooltip />
-              <Bar dataKey="v" name="Raised" fill={T.purple} radius={[3, 3, 0, 0]} barSize={18} />
+              <Bar dataKey="v" name="Raised" fill={colors.purple} radius={[3, 3, 0, 0]} barSize={18} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -167,13 +176,13 @@ export function ChangeDashboard() {
           </div>
           <ResponsiveContainer width="100%" height={190}>
             <BarChart data={byCat}>
-              <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => money(v)} />
+              <CartesianGrid vertical={false} stroke={colors.strokeSubtle} />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: colors.textTer }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: colors.textTer }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => money(v)} />
               <Tooltip formatter={(v: number) => money(v)} />
               <Bar dataKey="value" name="Cost impact" radius={[3, 3, 0, 0]} barSize={26}>
                 {byCat.map((e, i) => (
-                  <Cell key={i} fill={e.value < 0 ? T.low : T.brand} />
+                  <Cell key={i} fill={e.value < 0 ? colors.low : colors.brand} />
                 ))}
               </Bar>
             </BarChart>

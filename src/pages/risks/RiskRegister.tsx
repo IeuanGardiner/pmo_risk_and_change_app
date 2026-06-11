@@ -9,7 +9,7 @@ import { usePageTitle } from "../../hooks/usePageTitle";
 import { useSortPage, type SortState } from "../../hooks/useSortPage";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
-import { LEVEL_STYLES, T } from "../../theme/tokens";
+import { alpha, LEVEL_STYLES, T } from "../../theme/tokens";
 import type { Rating, Risk, RiskLevel, Scope } from "../../types/domain";
 import { IMPACTS, LIKELIHOODS } from "../../types/lookups";
 import { downloadCsv } from "../../utils/csv";
@@ -207,7 +207,7 @@ export function RiskRegister() {
               cursor: "pointer",
               background: T.brandBg,
               color: T.brand,
-              border: `1px solid ${T.brand}55`,
+              border: `1px solid ${alpha(T.brand, 34)}`,
             }}
           >
             Matrix: {LIKELIHOODS[matrixL]} × {IMPACTS[matrixI]}

@@ -57,6 +57,10 @@ export interface ConfigService {
   /** Replaces the configuration. The server must recompute stored risk levels
       when the matrix changes. */
   update(config: AppConfig): Promise<AppConfig>;
+  /** Stores an uploaded logo image and returns the URL to reference it by.
+      Mock returns a data: URL; the backend persists the file and returns a
+      served URL. The caller then saves that URL into branding.logoUrl. */
+  uploadLogo(file: File): Promise<{ url: string }>;
 }
 
 export interface ReferenceService {

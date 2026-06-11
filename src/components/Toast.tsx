@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
-import { T } from "../theme/tokens";
+import { alpha, T } from "../theme/tokens";
 
 /* ----------------------------------------------------------------------------
    Lightweight toast notifications — success/error feedback for every
@@ -83,7 +83,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 gap: 9,
                 padding: "11px 14px",
                 background: s.bg,
-                border: `1px solid ${s.c}55`,
+                border: `1px solid ${alpha(s.c, 34)}`,
                 borderLeft: `3px solid ${s.c}`,
                 borderRadius: 6,
                 boxShadow: T.shadow8,

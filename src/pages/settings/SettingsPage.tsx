@@ -5,8 +5,9 @@ import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { isMockMode } from "../../api";
 import { useAppData } from "../../store/AppData";
-import { T } from "../../theme/tokens";
+import { alpha, T } from "../../theme/tokens";
 import { CURRENCIES, SYSTEM_RISK_STATUSES, type AppConfig } from "../../types/config";
+import { BrandingEditor } from "./BrandingEditor";
 import { LookupListEditor } from "./LookupListEditor";
 import { ProjectsManager } from "./ProjectsManager";
 
@@ -51,8 +52,15 @@ export function SettingsPage() {
     <div style={{ padding: 24, overflow: "auto", position: "relative", minHeight: "100%" }}>
       <PageHeader
         title="Settings"
-        subtitle="Tailor the app per client — scoring model, lookups, projects and currency"
+        subtitle="Tailor the app per client — branding, scoring model, lookups, projects and currency"
       />
+
+      <Card style={{ padding: 18, marginBottom: 16 }}>
+        <SectionTitle sub="White-label the app for this client — name, logo, accent colour and colour scheme">
+          Branding &amp; Appearance
+        </SectionTitle>
+        <BrandingEditor value={draft.branding} onChange={(b) => setPart("branding", b)} />
+      </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -63,7 +71,7 @@ export function SettingsPage() {
                 padding: 14,
                 borderRadius: 6,
                 background: isMockMode ? T.mediumBg : T.lowBg,
-                border: `1px solid ${isMockMode ? T.medium : T.low}33`,
+                border: `1px solid ${alpha(isMockMode ? T.medium : T.low, 20)}`,
                 fontSize: 13,
                 color: T.textSec,
                 lineHeight: 1.6,
@@ -210,7 +218,7 @@ export function SettingsPage() {
               alignItems: "center",
               gap: 12,
               boxShadow: T.shadow8,
-              border: `1px solid ${T.brand}55`,
+              border: `1px solid ${alpha(T.brand, 34)}`,
             }}
           >
             <span style={{ fontSize: 13, fontWeight: 600, color: T.text, flex: 1 }}>

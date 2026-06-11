@@ -14,6 +14,7 @@ import {
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
+import { useTheme } from "../../theme/ThemeProvider";
 import { LEVEL_STYLES, RISK_EVENT_STYLES, T } from "../../theme/tokens";
 import type { RiskEvent } from "../../types/domain";
 import { IMPACTS, isClosed, LIKELIHOODS } from "../../types/lookups";
@@ -28,6 +29,7 @@ export function RiskDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
   const { risks, changes, projects, closeRisk, archiveRisk, restoreRisk } = useAppData();
+  const chartColors = useTheme().chartColors;
   const { can } = useAuth();
   const toast = useToast();
   const [closing, setClosing] = useState(false);
@@ -338,28 +340,28 @@ export function RiskDetail() {
         </div>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={profile}>
-            <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
+            <CartesianGrid vertical={false} stroke={chartColors.strokeSubtle} />
             <XAxis
               dataKey="m"
-              tick={{ fontSize: 11, fill: T.textTer }}
+              tick={{ fontSize: 11, fill: chartColors.textTer }}
               axisLine={false}
               tickLine={false}
               minTickGap={20}
               interval="preserveStartEnd"
             />
-            <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={28} />
+            <YAxis tick={{ fontSize: 11, fill: chartColors.textTer }} axisLine={false} tickLine={false} width={28} />
             <Tooltip formatter={(v: number) => `${currencySymbol()}${v.toFixed(2)}m`} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line
               type="monotone"
               dataKey="forecast"
               name="Forecast provision"
-              stroke={T.textTer}
+              stroke={chartColors.textTer}
               strokeWidth={1.6}
               strokeDasharray="4 4"
               dot={false}
             />
-            <Line type="monotone" dataKey="exposure" name="Open exposure" stroke={T.brand} strokeWidth={2.4} dot={{ r: 2 }} />
+            <Line type="monotone" dataKey="exposure" name="Open exposure" stroke={chartColors.brand} strokeWidth={2.4} dot={{ r: 2 }} />
             <Line type="monotone" dataKey="realised" name="Realised" stroke={RISK_EVENT_STYLES.Realised.c} strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="released" name="Released" stroke={RISK_EVENT_STYLES.Released.c} strokeWidth={2} dot={false} />
           </LineChart>
