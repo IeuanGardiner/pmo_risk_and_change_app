@@ -1,6 +1,7 @@
 import {
   ClipboardList,
   FileBarChart,
+  FolderKanban,
   GitPullRequestArrow,
   LayoutDashboard,
   LogOut,
@@ -56,6 +57,7 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: "General",
     items: [
+      { to: "/projects", label: "Projects", icon: FolderKanban, end: true, permission: "projects:manage" },
       { to: "/reports", label: "Reports", icon: FileBarChart, end: false, permission: "reports:read" },
       { to: "/settings", label: "Settings", icon: Settings, end: false, permission: "settings:manage" },
     ],

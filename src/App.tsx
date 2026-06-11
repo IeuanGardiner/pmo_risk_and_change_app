@@ -4,6 +4,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/layout/Sidebar";
 import { ToastProvider } from "./components/Toast";
 import { Landing } from "./pages/Landing";
+import { ProjectsPage } from "./pages/admin/ProjectsPage";
 import { RolesPage } from "./pages/admin/RolesPage";
 import { UsersPage } from "./pages/admin/UsersPage";
 import { SignInPage } from "./pages/auth/SignInPage";
@@ -74,6 +75,7 @@ function Shell() {
                 path="/changes/:ref/edit"
                 element={guarded("changes:update", <EditChange />)}
               />
+              <Route path="/projects" element={guarded("projects:manage", <ProjectsPage />)} />
               <Route path="/reports" element={guarded("reports:read", <Reports />)} />
               <Route path="/settings" element={guarded("settings:manage", <SettingsPage />)} />
               <Route path="/admin/users" element={guarded("users:manage", <UsersPage />)} />

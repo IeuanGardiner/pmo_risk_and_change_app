@@ -112,7 +112,12 @@ export function ChangeDetail() {
     ["Status", change.status],
     ["Raised By", change.raisedBy],
     ["Owner", change.owner],
-    ["Project", project ? `${project.name} (${project.code})` : "— Programme —"],
+    [
+      "Project",
+      project
+        ? `${project.name} (${project.code})${project.client ? ` · ${project.client}` : ""}`
+        : "— Programme —",
+    ],
     ["Required By", formatDate(change.requiredBy)],
     ["Cost Impact", moneyFull(change.costImpact)],
     ["Cost Profile", profileRangeLabel(change.costProfile)],

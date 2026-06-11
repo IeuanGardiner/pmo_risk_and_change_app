@@ -7,6 +7,7 @@ import type {
   ChangeTransitionAction,
   CostProfile,
   Project,
+  ProjectInput,
   Risk,
   RiskEvent,
   RiskEventInput,
@@ -284,10 +285,40 @@ export function createMockServices(): Services {
     });
   }
 
+  /** Field-level validation a real backend must enforce on create/update. */
+  const projectError = (
+    input: Partial<ProjectInput>,
+    base: Partial<Project> = {},
+    ignoreId?: string,
+  ): string | null => {
+    const name = (input.name ?? base.name ?? "").trim();
+    const code = (input.code ?? base.code ?? "").trim();
+    if ("name" in input || base.name === undefined) {
+      if (!name) return "Project name is required";
+    }
+    if ("code" in input || base.code === undefined) {
+      if (!code) return "Project code is required";
+    }
+    if (code) {
+      const clash = projects.some(
+        (p) => p.id !== ignoreId && p.code.trim().toLowerCase() === code.toLowerCase(),
+      );
+      if (clash) return `Project code "${code}" is already in use`;
+    }
+    const startDate = input.startDate ?? base.startDate ?? null;
+    const endDate = input.endDate ?? base.endDate ?? null;
+    if (startDate && endDate && endDate < startDate) {
+      return "End date must not be before the start date";
+    }
+    const value = input.value ?? base.value ?? null;
+    if (value != null && value < 0) return "Project value must be zero or greater";
+    return null;
+  };
+
   const patchProject = (id: string, patch: Partial<Project>): Promise<Project> => {
     const existing = projects.find((p) => p.id === id);
     if (!existing) return Promise.reject(new Error(`Project ${id} not found`));
-    const merged: Project = { ...existing, ...patch };
+    const merged: Project = { ...existing, ...patch, updatedAt: nowIso() };
     projects = projects.map((p) => (p.id === id ? merged : p));
     return delay(clone(merged));
   };
@@ -295,16 +326,30 @@ export function createMockServices(): Services {
   const projectService: ProjectService = {
     list: () => delay(clone(projects)),
     create: (input) => {
+      const invalid = projectError(input);
+      if (invalid) return Promise.reject(new Error(invalid));
       const rec: Project = {
+        ...input,
         id: nextRef("prj-", projects.map((p) => p.id)),
         name: input.name.trim(),
         code: input.code.trim(),
         archived: false,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
       };
       projects = [...projects, rec];
       return delay(clone(rec));
     },
-    update: (id, patch) => patchProject(id, patch),
+    update: (id, patch) => {
+      const existing = projects.find((p) => p.id === id);
+      if (!existing) return Promise.reject(new Error(`Project ${id} not found`));
+      const invalid = projectError(patch, existing, id);
+      if (invalid) return Promise.reject(new Error(invalid));
+      const trimmed: Partial<Project> = { ...patch };
+      if (patch.name !== undefined) trimmed.name = patch.name.trim();
+      if (patch.code !== undefined) trimmed.code = patch.code.trim();
+      return patchProject(id, trimmed);
+    },
     archive: (id) => patchProject(id, { archived: true }),
     restore: (id) => patchProject(id, { archived: false }),
   };

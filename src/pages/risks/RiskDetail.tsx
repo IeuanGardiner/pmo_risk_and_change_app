@@ -75,7 +75,12 @@ export function RiskDetail() {
     ["Impact", `${risk.impact} – ${IMPACTS[risk.impact]}`],
     ["Risk Score", `${risk.score} / 25`],
     ["Status", risk.status],
-    ["Project", project ? `${project.name} (${project.code})` : "— Programme —"],
+    [
+      "Project",
+      project
+        ? `${project.name} (${project.code})${project.client ? ` · ${project.client}` : ""}`
+        : "— Programme —",
+    ],
     ["Cost Profile", profileRangeLabel(risk.costProfile)],
     ["Target Resolution", formatDate(risk.targetDate)],
     ["Next Review", `${formatDate(risk.nextReviewDate)}${reviewOverdue ? " — overdue" : ""}`],

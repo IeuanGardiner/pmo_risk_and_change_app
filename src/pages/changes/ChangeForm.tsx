@@ -136,7 +136,7 @@ function ChangeInfoFields({
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
   referenceLabel: string;
 }) {
-  const { activeProjects, activeRisks, config } = useAppData();
+  const { pickerProjects, activeRisks, config } = useAppData();
   const onToggleRisk = useCallback(
     (ref: string) =>
       set(
@@ -214,7 +214,7 @@ function ChangeInfoFields({
             <Select
               value={f.projectId}
               onChange={(v) => set("projectId", v)}
-              options={activeProjects.map((p) => ({ value: p.id, label: p.name }))}
+              options={pickerProjects.map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }))}
               placeholder="Select project…"
             />
           </Field>
@@ -305,7 +305,7 @@ function ImpactFields({
 /* ============================ Raise (wizard) ============================== */
 export function AddChange() {
   const navigate = useNavigate();
-  const { changes, activeProjects, user, createChange } = useAppData();
+  const { changes, pickerProjects, user, createChange } = useAppData();
   const toast = useToast();
   usePageTitle("Raise Change");
   const [step, setStep] = useState<1 | 2>(1);
@@ -321,7 +321,7 @@ export function AddChange() {
     owner: "",
     raisedBy: user?.name ?? "",
     requiredBy: "",
-    projectId: activeProjects[0]?.id ?? "",
+    projectId: pickerProjects[0]?.id ?? "",
     costImpact: "",
     scheduleImpactDays: "",
     linkedRiskRefs: [],

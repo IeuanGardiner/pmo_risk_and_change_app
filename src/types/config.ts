@@ -42,6 +42,8 @@ export interface AppConfig {
   programRiskCategories: string[];
   changeCategories: string[];
   workstreams: string[];
+  /** Project type lookup, offered when maintaining projects. */
+  projectTypes: string[];
   /** Risk workflow statuses. "Open" and "Closed" are always present. */
   riskStatuses: string[];
   matrix: MatrixGrid;
@@ -120,6 +122,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     "Political",
   ],
   changeCategories: ["Scope", "Design", "Schedule", "Cost", "Regulatory", "Process"],
+  projectTypes: ["Infrastructure", "Buildings", "Highways", "Rail", "Water", "Energy", "Other"],
   workstreams: [
     "Civils & Structures",
     "Mechanical",
@@ -229,6 +232,9 @@ export function sanitizeConfig(raw: unknown): AppConfig {
     workstreams: isStringList(r.workstreams)
       ? [...(r.workstreams as string[])]
       : clone(DEFAULT_CONFIG.workstreams),
+    projectTypes: isStringList(r.projectTypes)
+      ? [...(r.projectTypes as string[])]
+      : clone(DEFAULT_CONFIG.projectTypes),
     riskStatuses: sanitizeStatuses(r.riskStatuses),
     matrix: sanitizeMatrix(r.matrix),
     currency: sanitizeCurrency(r.currency),

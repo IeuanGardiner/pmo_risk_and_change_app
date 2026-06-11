@@ -177,15 +177,35 @@ export type ChangeInput = Omit<
 
 /* ------------------------------- Reference ------------------------------- */
 
+export type ProjectStatus = "Pipeline" | "Active" | "On Hold" | "Complete" | "Cancelled";
+
 export interface Project {
   id: string;
-  name: string;
+  /** Short reference, unique (e.g. PRJ-001). */
   code: string;
+  name: string;
+  /** From config.projectTypes lookup. */
+  type: string | null;
+  client: string | null;
+  projectManager: string | null;
+  /** Defaults to "Active" on create. Independent of `archived`. */
+  status: ProjectStatus;
+  /** ISO date yyyy-mm-dd. */
+  startDate: string | null;
+  /** ISO date yyyy-mm-dd. */
+  endDate: string | null;
+  /** Project/contract value, in the display currency. */
+  value: number | null;
+  description: string;
   /** Archived projects stay resolvable on old records but are hidden from pickers. */
   archived: boolean;
+  /** ISO datetime, server-owned. */
+  createdAt: string;
+  /** ISO datetime, server-owned. */
+  updatedAt: string;
 }
 
-export type ProjectInput = Omit<Project, "id" | "archived">;
+export type ProjectInput = Omit<Project, "id" | "archived" | "createdAt" | "updatedAt">;
 
 export interface AppUser {
   initials: string;
