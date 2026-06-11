@@ -4,6 +4,8 @@ import type {
   Project,
   Rating,
   Risk,
+  RiskEvent,
+  RiskEventType,
   RiskStatus,
   Scope,
 } from "../../types/domain";
@@ -26,6 +28,14 @@ export const CURRENT_USER: AppUser = {
 };
 
 /* ---- Risks ---------------------------------------------------------------- */
+interface EventSeed {
+  type: RiskEventType;
+  amount: number;
+  date: string;
+  note: string;
+  closeRisk?: boolean;
+}
+
 interface RiskSeed {
   ref: string;
   scope: Scope;
@@ -39,8 +49,8 @@ interface RiskSeed {
   target: string;
   review?: string;
   est: number;
-  released: number;
-  realised: number;
+  /** Draw-down ledger seed — released/realised/reduced now flow from events. */
+  events?: EventSeed[];
   desc: string;
   mit: string;
   comments: string;
@@ -58,7 +68,11 @@ const riskSeed: RiskSeed[] = [
     ref: "R001", scope: "Project", title: "Scaffolding collapse at Level 4 east elevation",
     category: "Safety", workstream: "Civils & Structures", owner: "J. Hayes", l: 5, i: 5,
     status: "Open", target: "2026-08-31", review: "2026-06-20",
-    est: 4_200_000, released: 1_800_000, realised: 900_000,
+    est: 4_200_000,
+    events: [
+      { type: "Released", amount: 1_800_000, date: "2026-03-12", note: "Partial release as the remedial scope was clarified — exposure narrowed." },
+      { type: "Realised", amount: 900_000, date: "2026-04-10", note: "Emergency bracing and additional clamps installed following the wind event." },
+    ],
     desc: "Scaffolding panels on east elevation Level 4 are not adequately secured. Risk of collapse during high winds or heavy load operations.",
     mit: "Install additional clamps and bracing on all panels. Daily inspection regime in place. Cordon off zone below during wind > 30mph.",
     comments: "Inspector sign-off required before next lift operation. Escalated to Site Manager on 25 Mar 2026.",
@@ -69,7 +83,11 @@ const riskSeed: RiskSeed[] = [
     ref: "R002", scope: "Project", title: "Ground subsidence Zone D",
     category: "Structural", workstream: "Civils & Structures", owner: "S. Patel", l: 4, i: 4,
     status: "Open", target: "2026-05-15", review: "2026-05-15",
-    est: 1_600_000, released: 400_000, realised: 120_000,
+    est: 1_600_000,
+    events: [
+      { type: "Realised", amount: 120_000, date: "2026-03-20", note: "Additional ground investigation works in Zone D." },
+      { type: "Released", amount: 400_000, date: "2026-04-15", note: "Released once the underpinning option was costed below the provision." },
+    ],
     desc: "Settlement readings exceeding tolerance near the warehouse slab foundation in Zone D.",
     mit: "Additional ground investigation commissioned; underpinning options under review.",
     comments: "Weekly settlement monitoring reports circulated to the engineering review board.",
@@ -79,8 +97,12 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R003", scope: "Project", title: "Fire suppression non-compliant",
     category: "Safety", workstream: "Mechanical", owner: "J. Hayes", l: 3, i: 5,
-    status: "Mitigating", target: "2026-09-20", review: "2026-07-01",
-    est: 800_000, released: 300_000, realised: 60_000,
+    status: "Open", target: "2026-09-20", review: "2026-07-01",
+    est: 800_000,
+    events: [
+      { type: "Realised", amount: 60_000, date: "2026-03-05", note: "Interim compliance survey and temporary measures." },
+      { type: "Released", amount: 300_000, date: "2026-04-01", note: "Released after the replacement system was specified within budget." },
+    ],
     desc: "Suppression system in the main plant room does not meet current specification.",
     mit: "Replacement system specified; works scheduled for next shutdown window.",
     comments: "",
@@ -90,7 +112,7 @@ const riskSeed: RiskSeed[] = [
     ref: "R004", scope: "Project", title: "Tower crane load limit risk",
     category: "Safety", workstream: "Civils & Structures", owner: "D. Morgan", l: 2, i: 5,
     status: "Open", target: "2026-10-10", review: "2026-08-01",
-    est: 950_000, released: 0, realised: 0,
+    est: 950_000,
     desc: "Crane operating close to rated capacity for heaviest lifts.",
     mit: "Lift plan revision and independent verification before next heavy lift.",
     comments: "",
@@ -100,7 +122,11 @@ const riskSeed: RiskSeed[] = [
     ref: "R005", scope: "Project", title: "Electrical fault – temp supply",
     category: "Safety", workstream: "Electrical & Controls", owner: "J. Hayes", l: 3, i: 4,
     status: "Open", target: "2026-08-05", review: "2026-07-10",
-    est: 300_000, released: 80_000, realised: 20_000,
+    est: 300_000,
+    events: [
+      { type: "Realised", amount: 20_000, date: "2026-03-18", note: "Thermographic survey and minor remedial works." },
+      { type: "Released", amount: 80_000, date: "2026-04-22", note: "Released once the replacement board was ordered at a firm price." },
+    ],
     desc: "Intermittent faults on temporary distribution board.",
     mit: "Board replacement ordered; daily thermographic checks.",
     comments: "",
@@ -109,8 +135,12 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R006", scope: "Project", title: "Steel delivery delayed",
     category: "Supply", workstream: "Civils & Structures", owner: "M. Clarke", l: 5, i: 4,
-    status: "Mitigating", target: "2026-02-28", review: "2026-06-01",
-    est: 1_100_000, released: 600_000, realised: 250_000,
+    status: "Open", target: "2026-02-28", review: "2026-06-01",
+    est: 1_100_000,
+    events: [
+      { type: "Realised", amount: 250_000, date: "2026-03-08", note: "Expedited freight surcharge incurred to recover programme." },
+      { type: "Released", amount: 600_000, date: "2026-04-12", note: "Released after the second supplier confirmed delivery dates." },
+    ],
     desc: "Structural steel package slipping against programme.",
     mit: "Second supplier engaged; expedited freight authorised.",
     comments: "Freight surcharge approved by commercial 12 Feb.",
@@ -120,8 +150,11 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R007", scope: "Project", title: "Highway access consent renewal",
     category: "Regulatory", workstream: "Consents & Environment", owner: "L. Brooks", l: 3, i: 4,
-    status: "Monitoring", target: "2026-07-30", review: "2026-07-20",
-    est: 450_000, released: 100_000, realised: 0,
+    status: "Open", target: "2026-07-30", review: "2026-07-20",
+    est: 450_000,
+    events: [
+      { type: "Released", amount: 100_000, date: "2026-04-05", note: "Released as the renewal application progressed without objection." },
+    ],
     desc: "Consent for the highway access works expires before completion.",
     mit: "Renewal application submitted; weekly liaison with the authority.",
     comments: "",
@@ -131,7 +164,7 @@ const riskSeed: RiskSeed[] = [
     ref: "R008", scope: "Project", title: "Subcontractor insolvency – MEP",
     category: "Commercial", workstream: "Commercial", owner: "P. Evans", l: 2, i: 4,
     status: "Open", target: "2026-09-30", review: "2026-08-15",
-    est: 700_000, released: 0, realised: 0,
+    est: 700_000,
     desc: "MEP subcontractor showing financial distress signals.",
     mit: "Credit monitoring in place; contingency tender prepared.",
     comments: "",
@@ -140,8 +173,13 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R009", scope: "Project", title: "Concrete mix quality failure",
     category: "Quality", workstream: "Civils & Structures", owner: "R. Singh", l: 3, i: 3,
-    status: "Monitoring", target: "2026-08-12", review: "2026-07-05",
-    est: 220_000, released: 50_000, realised: 10_000,
+    status: "Open", target: "2026-08-12", review: "2026-07-05",
+    est: 220_000,
+    events: [
+      { type: "Realised", amount: 10_000, date: "2026-03-22", note: "Extra cube testing and sampling costs." },
+      { type: "Reduced", amount: 30_000, date: "2026-04-18", note: "Estimate revised down after the supplier mix audit reduced the likely rework." },
+      { type: "Released", amount: 50_000, date: "2026-05-02", note: "Released as test variability returned within tolerance." },
+    ],
     desc: "Cube test variability above acceptable threshold.",
     mit: "Increased sampling frequency; supplier mix audit.",
     comments: "",
@@ -151,7 +189,10 @@ const riskSeed: RiskSeed[] = [
     ref: "R010", scope: "Project", title: "Weather delay – concrete pours",
     category: "Schedule", workstream: "Civils & Structures", owner: "T. Walsh", l: 4, i: 2,
     status: "Closed", target: "2026-03-01",
-    est: 90_000, released: 90_000, realised: 90_000,
+    est: 90_000,
+    events: [
+      { type: "Realised", amount: 90_000, date: "2026-02-15", note: "Recovery costs incurred in full; risk closed at the March review.", closeRisk: true },
+    ],
     desc: "Cold-weather pours delayed against programme.",
     mit: "Heated enclosures and admixtures adopted; resolved.",
     comments: "Closed at March risk review. Archived after close-out.",
@@ -162,8 +203,8 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R011", scope: "Program", title: "Fuel & energy price volatility",
     category: "Supply Chain", workstream: null, owner: "I. Gardiner", l: 4, i: 4,
-    status: "Monitoring", target: "2027-03-31", review: "2026-05-30",
-    est: 3_500_000, released: 0, realised: 0,
+    status: "Open", target: "2027-03-31", review: "2026-05-30",
+    est: 3_500_000,
     desc: "Sustained energy price increases across the capital programme.",
     mit: "Hedging strategy and indexed contracts under review with commercial.",
     comments: "",
@@ -173,7 +214,10 @@ const riskSeed: RiskSeed[] = [
     ref: "R012", scope: "Program", title: "Construction cost inflation",
     category: "Economic", workstream: null, owner: "I. Gardiner", l: 5, i: 3,
     status: "Open", target: "2030-03-31", review: "2026-09-30",
-    est: 6_800_000, released: 0, realised: 0,
+    est: 6_800_000,
+    events: [
+      { type: "Reduced", amount: 800_000, date: "2026-04-20", note: "Contingency re-baselined down at the Q1 review as indices softened." },
+    ],
     desc: "Programme-wide cost inflation eroding the programme contingency.",
     mit: "Quarterly re-baselining; efficiency challenge across delivery partners.",
     comments: "",
@@ -183,8 +227,11 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R013", scope: "Program", title: "Building-safety regulation changes",
     category: "Regulatory", workstream: null, owner: "I. Gardiner", l: 3, i: 5,
-    status: "Monitoring", target: "2028-03-31", review: "2026-08-31",
-    est: 2_000_000, released: 0, realised: 0,
+    status: "Open", target: "2028-03-31", review: "2026-08-31",
+    est: 2_000_000,
+    events: [
+      { type: "Reduced", amount: 500_000, date: "2026-05-10", note: "Lower compliance cost expected after scenario planning identified a cheaper route." },
+    ],
     desc: "Changes to building-safety regulation affecting design approval and compliance costs across the programme.",
     mit: "Horizon-scanning; scenario plans for alternative compliance routes.",
     comments: "",
@@ -194,7 +241,7 @@ const riskSeed: RiskSeed[] = [
     ref: "R014", scope: "Program", title: "Global materials & shipping shortage",
     category: "Supply Chain", workstream: null, owner: "I. Gardiner", l: 3, i: 4,
     status: "Open", target: "2027-03-31", review: "2026-06-05",
-    est: 1_900_000, released: 0, realised: 0,
+    est: 1_900_000,
     desc: "Lead times on long-lead plant and equipment extending across all projects.",
     mit: "Early procurement and buffer stock for critical long-lead items.",
     comments: "",
@@ -202,33 +249,53 @@ const riskSeed: RiskSeed[] = [
   },
 ];
 
-export const SEED_RISKS: Risk[] = riskSeed.map((s) => ({
-  riskReference: s.ref,
-  scope: s.scope,
-  title: s.title,
-  description: s.desc,
-  category: s.category,
-  workstream: s.workstream,
-  owner: s.owner,
-  likelihood: s.l,
-  impact: s.i,
-  score: calcScore(s.l, s.i),
-  level: calcLevel(DEFAULT_CONFIG.matrix, s.l, s.i),
-  status: s.status,
-  targetDate: s.target,
-  nextReviewDate: s.review ?? null,
-  projectId: s.scope === "Project" ? (s.project ?? PROJECTS[0].id) : null,
-  estimatedTotal: s.est,
-  releasedTotal: s.released,
-  realisedTotal: s.realised,
-  costProfile: evenProfile(s.est, s.start, s.months),
-  mitigation: s.mit,
-  comments: s.comments,
-  linkedChangeRefs: s.linkedChanges ?? [],
-  archived: s.archived ?? false,
-  createdAt: `${s.created}T09:00:00Z`,
-  updatedAt: "2026-06-05T09:41:00Z",
-}));
+const buildEvents = (ref: string, seeds: EventSeed[] = []): RiskEvent[] =>
+  seeds.map((e, idx) => ({
+    id: `${ref}-e${idx + 1}`,
+    type: e.type,
+    amount: e.amount,
+    date: e.date,
+    note: e.note,
+    actor: CURRENT_USER.name,
+    createdAt: `${e.date}T10:00:00Z`,
+    closedRisk: e.closeRisk ?? false,
+  }));
+
+const sumEvents = (events: RiskEvent[], type: RiskEventType): number =>
+  events.filter((e) => e.type === type).reduce((a, e) => a + e.amount, 0);
+
+export const SEED_RISKS: Risk[] = riskSeed.map((s) => {
+  const events = buildEvents(s.ref, s.events);
+  return {
+    riskReference: s.ref,
+    scope: s.scope,
+    title: s.title,
+    description: s.desc,
+    category: s.category,
+    workstream: s.workstream,
+    owner: s.owner,
+    likelihood: s.l,
+    impact: s.i,
+    score: calcScore(s.l, s.i),
+    level: calcLevel(DEFAULT_CONFIG.matrix, s.l, s.i),
+    status: s.status,
+    targetDate: s.target,
+    nextReviewDate: s.review ?? null,
+    projectId: s.scope === "Project" ? (s.project ?? PROJECTS[0].id) : null,
+    estimatedTotal: s.est,
+    realisedTotal: sumEvents(events, "Realised"),
+    releasedTotal: sumEvents(events, "Released"),
+    reducedTotal: sumEvents(events, "Reduced"),
+    costProfile: evenProfile(s.est, s.start, s.months),
+    events,
+    mitigation: s.mit,
+    comments: s.comments,
+    linkedChangeRefs: s.linkedChanges ?? [],
+    archived: s.archived ?? false,
+    createdAt: `${s.created}T09:00:00Z`,
+    updatedAt: "2026-06-05T09:41:00Z",
+  };
+});
 
 /* ---- Changes --------------------------------------------------------------- */
 interface ChangeSeed {

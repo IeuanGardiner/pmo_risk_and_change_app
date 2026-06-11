@@ -20,9 +20,14 @@ export interface AppConfig {
   programRiskCategories: string[];
   changeCategories: string[];
   workstreams: string[];
+  /** Risk workflow statuses. "Open" and "Closed" are always present. */
+  riskStatuses: string[];
   matrix: MatrixGrid;
   currency: CurrencyConfig;
 }
+
+/** Statuses the workflow depends on and that admins cannot remove. */
+export const SYSTEM_RISK_STATUSES = ["Open", "Closed"];
 
 export const CURRENCIES: CurrencyConfig[] = [
   { code: "GBP", symbol: "£" },
@@ -69,6 +74,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     "Commercial",
     "Consents & Environment",
   ],
+  riskStatuses: ["Open", "Closed"],
   matrix: DEFAULT_MATRIX,
   currency: CURRENCIES[0],
 };
@@ -99,6 +105,16 @@ function sanitizeMatrix(raw: unknown): MatrixGrid {
   return grid;
 }
 
+/** Always keep the workflow's well-known statuses, de-duplicated, order-stable. */
+function sanitizeStatuses(raw: unknown): string[] {
+  const base = isStringList(raw)
+    ? [...new Set((raw as string[]).map((s) => s.trim()).filter(Boolean))]
+    : clone(DEFAULT_CONFIG.riskStatuses);
+  if (!base.includes("Open")) base.unshift("Open");
+  if (!base.includes("Closed")) base.push("Closed");
+  return base;
+}
+
 function sanitizeCurrency(raw: unknown): CurrencyConfig {
   if (typeof raw === "object" && raw !== null) {
     const { code, symbol } = raw as Record<string, unknown>;
@@ -126,6 +142,7 @@ export function sanitizeConfig(raw: unknown): AppConfig {
     workstreams: isStringList(r.workstreams)
       ? [...(r.workstreams as string[])]
       : clone(DEFAULT_CONFIG.workstreams),
+    riskStatuses: sanitizeStatuses(r.riskStatuses),
     matrix: sanitizeMatrix(r.matrix),
     currency: sanitizeCurrency(r.currency),
   };
