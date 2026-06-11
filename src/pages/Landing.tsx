@@ -1,8 +1,13 @@
 import { T } from "../theme/tokens";
+import { loadCachedBranding } from "../theme/branding";
+import { BrandMark } from "../components/Brand";
 import { Spinner, Btn } from "../components/ui";
 
-/* Wireframe 00 — Landing / loading screen, shown while services initialise. */
+/* Wireframe 00 — Landing / loading screen, shown while services initialise.
+   Reads the cached branding so the splash carries the client's identity even
+   before the config service responds. */
 export function Landing({ error, onRetry }: { error?: string | null; onRetry?: () => void }) {
+  const { appName, tagline, logoUrl } = loadCachedBranding();
   return (
     <div
       style={{
@@ -14,35 +19,11 @@ export function Landing({ error, onRetry }: { error?: string | null; onRetry?: (
       }}
     >
       <div style={{ textAlign: "center" }}>
-        <div
-          style={{
-            width: 64,
-            height: 64,
-            background: T.logo,
-            borderRadius: 14,
-            display: "grid",
-            placeItems: "center",
-            margin: "0 auto 18px",
-          }}
-        >
-          <div
-            style={{
-              width: 30,
-              height: 22,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-            }}
-          >
-            {[0, 1, 2].map((k) => (
-              <div key={k} style={{ height: 4.5, background: "#fff", borderRadius: 3 }} />
-            ))}
-          </div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
+          <BrandMark logoUrl={logoUrl} appName={appName} size={64} radius={14} />
         </div>
-        <div style={{ color: "#fff", fontWeight: 700, fontSize: 26 }}>RiskShield</div>
-        <div style={{ color: T.sidebarText, fontSize: 13, marginTop: 4 }}>
-          Project &amp; Programme Risk + Change
-        </div>
+        <div style={{ color: "#fff", fontWeight: 700, fontSize: 26 }}>{appName}</div>
+        <div style={{ color: T.sidebarText, fontSize: 13, marginTop: 4 }}>{tagline}</div>
         <div style={{ marginTop: 28 }}>
           {error ? (
             <div>

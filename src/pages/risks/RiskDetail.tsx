@@ -11,6 +11,7 @@ import {
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
+import { useTheme } from "../../theme/ThemeProvider";
 import { LEVEL_STYLES, T } from "../../theme/tokens";
 import { IMPACTS, LIKELIHOODS } from "../../types/lookups";
 import { profileRangeLabel } from "../../utils/calendar";
@@ -23,6 +24,7 @@ export function RiskDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
   const { risks, changes, projects, closeRisk, archiveRisk, restoreRisk } = useAppData();
+  const chartColors = useTheme().chartColors;
   const toast = useToast();
   const [closing, setClosing] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -278,22 +280,22 @@ export function RiskDetail() {
         </div>
         <ResponsiveContainer width="100%" height={190}>
           <LineChart data={profile}>
-            <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
+            <CartesianGrid vertical={false} stroke={chartColors.strokeSubtle} />
             <XAxis
               dataKey="m"
-              tick={{ fontSize: 11, fill: T.textTer }}
+              tick={{ fontSize: 11, fill: chartColors.textTer }}
               axisLine={false}
               tickLine={false}
               minTickGap={20}
               interval="preserveStartEnd"
             />
-            <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={28} />
+            <YAxis tick={{ fontSize: 11, fill: chartColors.textTer }} axisLine={false} tickLine={false} width={28} />
             <Tooltip formatter={(v: number) => `${currencySymbol()}${v.toFixed(2)}m`} />
             <Line
               type="monotone"
               dataKey="est"
               name={`Estimated (${currencySymbol()}m)`}
-              stroke={T.brand}
+              stroke={chartColors.brand}
               strokeWidth={2.4}
               dot={{ r: 2.5 }}
             />

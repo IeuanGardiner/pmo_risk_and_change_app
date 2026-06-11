@@ -66,6 +66,17 @@ function persistConfig(config: AppConfig): void {
   }
 }
 
+/* Logo upload constraints — mirrored by the backend contract in the README. */
+export const LOGO_MAX_BYTES = 512 * 1024;
+export const LOGO_ACCEPT = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
+
+/** Validate an uploaded logo (type + size). Returns an error message or null. */
+export function logoUploadError(file: File): string | null {
+  if (!LOGO_ACCEPT.includes(file.type)) return "Logo must be a PNG, JPEG, SVG or WebP image";
+  if (file.size > LOGO_MAX_BYTES) return "Logo must be 512 KB or smaller";
+  return null;
+}
+
 /** Reject obviously broken profiles before they reach the store. */
 const profileError = (p: CostProfile | undefined): string | null => {
   if (!p) return null;
@@ -260,6 +271,18 @@ export function createMockServices(): Services {
         level: calcLevel(config.matrix, r.likelihood, r.impact),
       }));
       return delay(clone(config));
+    },
+    uploadLogo: (file) => {
+      const error = logoUploadError(file);
+      if (error) return Promise.reject(new Error(error));
+      // No backend in mock mode — inline the image as a data URL so it survives
+      // a reload via the localStorage-persisted config.
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ url: String(reader.result) });
+        reader.onerror = () => reject(new Error("Could not read the selected file"));
+        reader.readAsDataURL(file);
+      });
     },
   };
 

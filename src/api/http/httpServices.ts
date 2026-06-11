@@ -83,6 +83,18 @@ export function createHttpServices(baseUrl: string): Services {
   const config: ConfigService = {
     get: () => api<AppConfig>("/api/config"),
     update: (next) => api<AppConfig>("/api/config", { method: "PUT", body: JSON.stringify(next) }),
+    uploadLogo: async (file) => {
+      // Multipart upload — let the browser set the multipart boundary; do not
+      // send the JSON Content-Type used by the rest of the API.
+      const form = new FormData();
+      form.append("logo", file);
+      const res = await fetch(`${baseUrl}/api/branding/logo`, { method: "POST", body: form });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`POST /api/branding/logo failed (${res.status}): ${body}`);
+      }
+      return (await res.json()) as { url: string };
+    },
   };
 
   const reference: ReferenceService = {

@@ -1,3 +1,92 @@
+/* ============================================================================
+   Design tokens as CSS custom properties. The TypeScript theme object in
+   src/theme/tokens.ts maps every token to one of these variables, so a single
+   declaration here drives the whole UI. Two schemes are provided; the active
+   one is selected by the `data-theme` attribute on <html> (set by
+   ThemeProvider). The accent (`--brand`) is overridden per deployment from the
+   branding config — light/dark shades are derived from it with color-mix so a
+   single configured colour adapts to either scheme.
+   ========================================================================== */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+  --row-hover: #fafafa;
+  --stroke: #e1dfdd;
+  --stroke-subtle: #edebe9;
+  --text: #242424;
+  --text-sec: #616161;
+  --text-ter: #8a8886;
+
+  --brand: #0f6cbd;
+
+  --sidebar: #1b1e2b;
+  --sidebar-item: #2a2e3f;
+  --sidebar-text: #c9cdd9;
+  --logo: #e84a4a;
+
+  --critical: #b10e1c;
+  --critical-bg: #fdf3f4;
+  --high: #d9620b;
+  --high-bg: #fdf6f0;
+  --medium: #c19c00;
+  --medium-bg: #fbf8ec;
+  --low: #0e7a0b;
+  --low-bg: #f1f8f1;
+
+  --purple: #8764b8;
+  --teal: #038387;
+
+  --shadow-2: 0 1px 2px rgba(0, 0, 0, 0.07), 0 0px 2px rgba(0, 0, 0, 0.06);
+  --shadow-8: 0 3.2px 7.2px rgba(0, 0, 0, 0.1), 0 0.6px 1.8px rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #16171b;
+  --surface: #1f2126;
+  --surface-2: #25272d;
+  --row-hover: #272a31;
+  --stroke: #34373f;
+  --stroke-subtle: #2b2e35;
+  --text: #ecedef;
+  --text-sec: #b9bcc4;
+  --text-ter: #8b8f99;
+
+  /* Accent is overridden at runtime; this is the default-scheme fallback. */
+  --brand: #4aa3e8;
+
+  --sidebar: #121317;
+  --sidebar-item: #2a2e3f;
+  --sidebar-text: #c9cdd9;
+  --logo: #e84a4a;
+
+  --critical: #f1707a;
+  --critical-bg: #2e1a1d;
+  --high: #e8954e;
+  --high-bg: #2e2317;
+  --medium: #d9be4a;
+  --medium-bg: #2b2715;
+  --low: #5cba58;
+  --low-bg: #182916;
+
+  --purple: #b49bdb;
+  --teal: #3fbabe;
+
+  --shadow-2: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0px 2px rgba(0, 0, 0, 0.3);
+  --shadow-8: 0 3.2px 7.2px rgba(0, 0, 0, 0.5), 0 0.6px 1.8px rgba(0, 0, 0, 0.4);
+}
+
+/* Shades derived from whatever --brand resolves to, in either scheme. */
+:root {
+  --brand-hover: color-mix(in srgb, var(--brand) 82%, #000);
+  --brand-bg: color-mix(in srgb, var(--brand) 12%, var(--surface));
+}
+
 * {
   box-sizing: border-box;
 }
@@ -13,6 +102,14 @@ body,
 body {
   font-family: "Segoe UI", -apple-system, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* One global transition so theme switches feel deliberate, not jarring. */
+body,
+[data-theme] {
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 @keyframes rs-spin {
@@ -22,5 +119,18 @@ body {
 }
 
 tr.rs-row:hover td {
-  background: #fafafa;
+  background: var(--row-hover);
+}
+
+/* Recharts default tooltip is light-on-white; align it to the active theme. */
+.recharts-default-tooltip {
+  background: var(--surface) !important;
+  border: 1px solid var(--stroke) !important;
+  border-radius: 6px !important;
+  box-shadow: var(--shadow-8);
+  color: var(--text) !important;
+}
+.recharts-default-tooltip .recharts-tooltip-label,
+.recharts-default-tooltip .recharts-tooltip-item {
+  color: var(--text) !important;
 }

@@ -33,6 +33,17 @@ environment variable.
   linked risks, cost impact profile, **Delete Draft** for unsubmitted changes
 - Risk ↔ change linking is bidirectional and visible from both detail views
 
+**Branding & appearance (Settings)**
+- White-label the app per client: product name, strapline and logo (upload a
+  PNG/JPEG/SVG/WebP, ≤512 KB) — e.g. rename "RiskShield" to "Company X Risk &
+  Change Portal". The name flows into the sidebar, splash screen and browser tab
+- Accent colour: pick a preset or any custom hex; light/dark shades are derived
+  automatically (via CSS `color-mix`) so a single colour adapts to either scheme
+- **Light / dark mode** with a one-click toggle in the sidebar. A deployment
+  *default* scheme (light/dark/match-system) is saved in the config; each user
+  can override it for their own browser. Theme + accent are applied before first
+  paint (from a cached copy) to avoid a flash of the wrong colours
+
 **Customisation (Settings)**
 - Add / rename / delete risk categories, programme categories, workstreams and
   change categories — values in use by records are protected
@@ -100,8 +111,9 @@ All payload shapes are the TypeScript interfaces in `src/types/domain.ts` and
 | PATCH | `/api/projects/:id` | `Partial<ProjectInput>` | `Project` |
 | POST | `/api/projects/:id/archive` | — | `Project` |
 | POST | `/api/projects/:id/restore` | — | `Project` |
-| GET | `/api/config` | — | `AppConfig` |
+| GET | `/api/config` | — | `AppConfig` (incl. `branding`) |
 | PUT | `/api/config` | `AppConfig` | `AppConfig` |
+| POST | `/api/branding/logo` | `multipart/form-data` field `logo` (image file) | `{ "url": string }` |
 | GET | `/api/me` | — | `AppUser` |
 
 ### Cost profiles
@@ -135,6 +147,16 @@ in `src/api/mock/mockServices.ts`):
 - Keeping `risk.linkedChangeRefs` consistent with `change.linkedRiskRefs`
 - `archived` flags are server-owned — set only via the archive/restore endpoints
 - Validate cost profiles: `startMonth` is `yyyy-mm`, `1 ≤ periods.length ≤ 60`
+- **Branding** lives in `AppConfig.branding` (`appName`, `tagline`, `brandColor`,
+  `logoUrl`, `defaultTheme`). `POST /api/branding/logo` stores the uploaded image
+  and returns the URL to put in `branding.logoUrl` (validate type + size; the
+  mock returns a `data:` URL). The server should re-validate branding on
+  `PUT /api/config` — `sanitizeConfig`/`sanitizeBranding` in `src/types/config.ts`
+  document the rules (hex colour, allowed theme modes, image-only logo URLs)
+
+> The colour scheme **preference** (light/dark/system) is a per-user, per-device
+> choice kept in `localStorage`, not server state. `branding.defaultTheme` is
+> only the first-run default.
 
 ## Project structure
 
@@ -146,7 +168,8 @@ src/
   hooks/          table sorting/pagination, page titles
   pages/          one folder per area (dashboard, risks, changes, reports, settings)
   store/          AppData context — client cache over the services
-  theme/          design tokens (colours, typography, severity styles)
+  theme/          CSS-variable design tokens, ThemeProvider (light/dark + accent),
+                  branding/theme persistence helpers
   types/          domain models + AppConfig (the API contract) + lookup tables
   utils/          formatting, calendar maths, CSV export, chart series derivation
 ```

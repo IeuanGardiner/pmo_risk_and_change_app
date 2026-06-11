@@ -11,6 +11,7 @@ import {
 } from "../../components/ui";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useAppData } from "../../store/AppData";
+import { useTheme } from "../../theme/ThemeProvider";
 import { CHART_COLORS, LEVEL_STYLES, T } from "../../theme/tokens";
 import type { Risk } from "../../types/domain";
 import { RISK_LEVELS } from "../../types/lookups";
@@ -19,6 +20,7 @@ import { currencySymbol, formatDate, formatDateTime, isOverdue, money } from "..
 
 export function RiskDashboard() {
   const { activeRisks, config } = useAppData();
+  const c = useTheme().chartColors;
   const navigate = useNavigate();
   usePageTitle("Risk Dashboard");
 
@@ -229,11 +231,11 @@ export function RiskDashboard() {
           </div>
           <ResponsiveContainer width="100%" height={120}>
             <BarChart data={newByMonth}>
-              <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
-              <XAxis dataKey="m" tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={20} allowDecimals={false} />
+              <CartesianGrid vertical={false} stroke={c.strokeSubtle} />
+              <XAxis dataKey="m" tick={{ fontSize: 11, fill: c.textTer }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: c.textTer }} axisLine={false} tickLine={false} width={20} allowDecimals={false} />
               <Tooltip />
-              <Bar dataKey="v" name="New risks" fill={T.brand} radius={[3, 3, 0, 0]} barSize={18} />
+              <Bar dataKey="v" name="New risks" fill={c.brand} radius={[3, 3, 0, 0]} barSize={18} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
@@ -263,21 +265,21 @@ export function RiskDashboard() {
           </div>
           <ResponsiveContainer width="100%" height={185}>
             <LineChart data={drawdown}>
-              <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
+              <CartesianGrid vertical={false} stroke={c.strokeSubtle} />
               <XAxis
                 dataKey="m"
-                tick={{ fontSize: 11, fill: T.textTer }}
+                tick={{ fontSize: 11, fill: c.textTer }}
                 axisLine={false}
                 tickLine={false}
                 minTickGap={20}
                 interval="preserveStartEnd"
               />
-              <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={24} />
+              <YAxis tick={{ fontSize: 11, fill: c.textTer }} axisLine={false} tickLine={false} width={24} />
               <Tooltip formatter={(v: number) => `${currencySymbol()}${v.toFixed(2)}m`} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="est" name="Estimated" stroke={T.brand} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="rel" name="Released" stroke={T.low} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="real" name="Realised" stroke={T.high} strokeWidth={2} strokeDasharray="5 4" dot={false} />
+              <Line type="monotone" dataKey="est" name="Estimated" stroke={c.brand} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="rel" name="Released" stroke={c.low} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="real" name="Realised" stroke={c.high} strokeWidth={2} strokeDasharray="5 4" dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </Card>

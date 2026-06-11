@@ -3,13 +3,17 @@ import {
   FileBarChart,
   GitPullRequestArrow,
   LayoutDashboard,
+  Moon,
   PlusCircle,
   Repeat,
   Settings,
+  Sun,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { T } from "../../theme/tokens";
+import { useTheme } from "../../theme/ThemeProvider";
 import { useAppData } from "../../store/AppData";
+import { BrandMark } from "../Brand";
 import { GlobalSearch } from "../GlobalSearch";
 
 const NAV_SECTIONS = [
@@ -44,7 +48,9 @@ const NAV_SECTIONS = [
 ];
 
 export function Sidebar() {
-  const { user, activeProjects, activeRisks, changes } = useAppData();
+  const { user, activeProjects, activeRisks, changes, config } = useAppData();
+  const { scheme, toggle } = useTheme();
+  const { appName, tagline, logoUrl } = config.branding;
 
   return (
     <div
@@ -59,37 +65,43 @@ export function Sidebar() {
       }}
     >
       <div style={{ padding: "18px 16px", display: "flex", alignItems: "center", gap: 11 }}>
-        <div
-          style={{
-            width: 34,
-            height: 34,
-            background: T.logo,
-            borderRadius: 8,
-            display: "grid",
-            placeItems: "center",
-            flexShrink: 0,
-          }}
-        >
+        <BrandMark logoUrl={logoUrl} appName={appName} size={34} />
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
-              width: 16,
-              height: 12,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: 15,
+              lineHeight: 1.1,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
+            title={appName}
           >
-            {[0, 1, 2].map((k) => (
-              <div key={k} style={{ height: 2.4, background: "#fff", borderRadius: 2 }} />
-            ))}
+            {appName}
           </div>
+          {tagline && <div style={{ fontSize: 11, color: T.textTer }}>{tagline}</div>}
         </div>
-        <div>
-          <div style={{ color: "#fff", fontWeight: 700, fontSize: 15, lineHeight: 1.1 }}>
-            RiskShield
-          </div>
-          <div style={{ fontSize: 11, color: T.textTer }}>Risk &amp; Change</div>
-        </div>
+        <button
+          onClick={toggle}
+          title={scheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          aria-label={scheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          style={{
+            display: "grid",
+            placeItems: "center",
+            width: 30,
+            height: 30,
+            flexShrink: 0,
+            borderRadius: 6,
+            border: `1px solid ${T.sidebarItem}`,
+            background: "transparent",
+            color: T.sidebarText,
+            cursor: "pointer",
+          }}
+        >
+          {scheme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
       </div>
 
       <GlobalSearch />

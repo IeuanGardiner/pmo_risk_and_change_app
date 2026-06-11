@@ -11,6 +11,7 @@ import {
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
+import { useTheme } from "../../theme/ThemeProvider";
 import { CHANGE_STATUS_STYLES, T } from "../../theme/tokens";
 import type { ChangeTransitionAction } from "../../types/domain";
 import { profileRangeLabel } from "../../utils/calendar";
@@ -38,6 +39,7 @@ export function ChangeDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
   const { changes, risks, projects, transitionChange, deleteChange } = useAppData();
+  const chartColors = useTheme().chartColors;
   const toast = useToast();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -289,18 +291,18 @@ export function ChangeDetail() {
             </SectionTitle>
             <ResponsiveContainer width="100%" height={170}>
               <BarChart data={profileData}>
-                <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
+                <CartesianGrid vertical={false} stroke={chartColors.strokeSubtle} />
                 <XAxis
                   dataKey="m"
-                  tick={{ fontSize: 11, fill: T.textTer }}
+                  tick={{ fontSize: 11, fill: chartColors.textTer }}
                   axisLine={false}
                   tickLine={false}
                   minTickGap={20}
                   interval="preserveStartEnd"
                 />
-                <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => money(v)} />
+                <YAxis tick={{ fontSize: 11, fill: chartColors.textTer }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => money(v)} />
                 <Tooltip formatter={(v: number) => moneyFull(v)} />
-                <Bar dataKey="v" name="Cost impact" fill={T.brand} radius={[3, 3, 0, 0]} barSize={18} />
+                <Bar dataKey="v" name="Cost impact" fill={chartColors.brand} radius={[3, 3, 0, 0]} barSize={18} />
               </BarChart>
             </ResponsiveContainer>
           </Card>
