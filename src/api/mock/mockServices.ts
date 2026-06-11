@@ -8,9 +8,11 @@ import type {
   CostProfile,
   Project,
   Risk,
+  RiskEvent,
+  RiskEventInput,
   RiskInput,
 } from "../../types/domain";
-import { calcLevel, calcScore } from "../../types/lookups";
+import { calcLevel, calcScore, CLOSED_STATUS, RISK_EVENT_TYPES } from "../../types/lookups";
 import { isMonthKey, MAX_PROFILE_MONTHS } from "../../utils/calendar";
 import type {
   ChangeService,
@@ -76,6 +78,20 @@ const profileError = (p: CostProfile | undefined): string | null => {
   return null;
 };
 
+const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/** Recompute the ledger-derived totals so they always agree with `events`. */
+const withTotals = (risk: Risk): Risk => {
+  const sum = (type: RiskEvent["type"]) =>
+    risk.events.filter((e) => e.type === type).reduce((a, e) => a + e.amount, 0);
+  return {
+    ...risk,
+    realisedTotal: sum("Realised"),
+    releasedTotal: sum("Released"),
+    reducedTotal: sum("Reduced"),
+  };
+};
+
 /* ---- Workflow rules: which action is legal from which status ------------- */
 export const TRANSITIONS: Record<ChangeTransitionAction, { from: ChangeStatus[]; to: ChangeStatus }> = {
   submit: { from: ["Draft"], to: "Submitted" },
@@ -88,10 +104,9 @@ export const TRANSITIONS: Record<ChangeTransitionAction, { from: ChangeStatus[];
 
 export function createMockServices(): Services {
   let config: AppConfig = loadStoredConfig();
-  let risks: Risk[] = clone(SEED_RISKS).map((r) => ({
-    ...r,
-    level: calcLevel(config.matrix, r.likelihood, r.impact),
-  }));
+  let risks: Risk[] = clone(SEED_RISKS).map((r) =>
+    withTotals({ ...r, level: calcLevel(config.matrix, r.likelihood, r.impact) }),
+  );
   let changes: ChangeRequest[] = clone(SEED_CHANGES);
   let projects: Project[] = clone(PROJECTS);
 
@@ -114,6 +129,10 @@ export function createMockServices(): Services {
         riskReference: nextRef("R", risks.map((r) => r.riskReference)),
         score: calcScore(input.likelihood, input.impact),
         level: calcLevel(config.matrix, input.likelihood, input.impact),
+        realisedTotal: 0,
+        releasedTotal: 0,
+        reducedTotal: 0,
+        events: [],
         archived: false,
         createdAt: nowIso(),
         updatedAt: nowIso(),
@@ -140,7 +159,38 @@ export function createMockServices(): Services {
       risks = risks.map((r) => (r.riskReference === ref ? merged : r));
       return delay(clone(merged));
     },
-    close: (ref) => riskService.update(ref, { status: "Closed" }),
+    addEvent: (ref, event: RiskEventInput) => {
+      const existing = risks.find((r) => r.riskReference === ref);
+      if (!existing) return Promise.reject(new Error(`Risk ${ref} not found`));
+      if (!RISK_EVENT_TYPES.includes(event.type)) {
+        return Promise.reject(new Error(`Unknown risk event type "${event.type}"`));
+      }
+      if (!(event.amount > 0)) {
+        return Promise.reject(new Error("Event amount must be greater than zero"));
+      }
+      if (!ISO_DATE.test(event.date)) {
+        return Promise.reject(new Error("Event date must be a valid date (yyyy-mm-dd)"));
+      }
+      const entry: RiskEvent = {
+        id: `${ref}-e${existing.events.length + 1}`,
+        type: event.type,
+        amount: event.amount,
+        date: event.date,
+        note: event.note.trim(),
+        actor: CURRENT_USER.name,
+        createdAt: nowIso(),
+        closedRisk: event.closeRisk,
+      };
+      const merged = withTotals({
+        ...existing,
+        events: [...existing.events, entry],
+        status: event.closeRisk ? CLOSED_STATUS : existing.status,
+        updatedAt: nowIso(),
+      });
+      risks = risks.map((r) => (r.riskReference === ref ? merged : r));
+      return delay(clone(merged));
+    },
+    close: (ref) => riskService.update(ref, { status: CLOSED_STATUS }),
     archive: (ref) => setArchived(ref, true),
     restore: (ref) => setArchived(ref, false),
   };

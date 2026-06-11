@@ -39,6 +39,11 @@ export function createHttpServices(baseUrl: string): Services {
         method: "PATCH",
         body: JSON.stringify(patch),
       }),
+    addEvent: (ref, event) =>
+      api<Risk>(`/api/risks/${encodeURIComponent(ref)}/events`, {
+        method: "POST",
+        body: JSON.stringify(event),
+      }),
     close: (ref) => api<Risk>(`/api/risks/${encodeURIComponent(ref)}/close`, { method: "POST" }),
     archive: (ref) =>
       api<Risk>(`/api/risks/${encodeURIComponent(ref)}/archive`, { method: "POST" }),

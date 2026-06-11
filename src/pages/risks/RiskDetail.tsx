@@ -1,23 +1,27 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Archive, ArchiveRestore, ArrowLeft, CheckCircle2, Pencil } from "lucide-react";
 import {
-  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Archive, ArchiveRestore, ArrowLeft, CheckCircle2, Pencil, Plus,
+} from "lucide-react";
+import {
+  CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import {
-  Btn, Card, ChangeStatusPill, EmptyState, PageHeader, Pill, SectionTitle,
+  Btn, Card, ChangeStatusPill, EmptyState, PageHeader, Pill, RiskStatusText, SectionTitle,
 } from "../../components/ui";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
-import { LEVEL_STYLES, T } from "../../theme/tokens";
-import { IMPACTS, LIKELIHOODS } from "../../types/lookups";
+import { LEVEL_STYLES, RISK_EVENT_STYLES, T } from "../../theme/tokens";
+import type { RiskEvent } from "../../types/domain";
+import { IMPACTS, isClosed, LIKELIHOODS } from "../../types/lookups";
 import { profileRangeLabel } from "../../utils/calendar";
 import { riskDrawdown } from "../../utils/chartData";
 import {
   currencySymbol, formatDate, formatDateTime, isOverdue, money, moneyFull,
 } from "../../utils/format";
+import { RiskUpdateDialog } from "./RiskUpdateDialog";
 
 export function RiskDetail() {
   const { ref } = useParams<{ ref: string }>();
@@ -27,6 +31,7 @@ export function RiskDetail() {
   const [closing, setClosing] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [update, setUpdate] = useState<{ closing: boolean } | null>(null);
 
   const risk = risks.find((r) => r.riskReference === ref);
   usePageTitle(risk ? `Risk ${risk.riskReference}` : "Risk not found");
@@ -48,9 +53,15 @@ export function RiskDetail() {
   }
 
   const s = LEVEL_STYLES[risk.level];
+  const closed = isClosed(risk.status);
   const linkedChanges = changes.filter((c) => risk.linkedChangeRefs.includes(c.changeReference));
   const project = projects.find((p) => p.id === risk.projectId);
-  const reviewOverdue = risk.status !== "Closed" && isOverdue(risk.nextReviewDate);
+  const reviewOverdue = !closed && isOverdue(risk.nextReviewDate);
+
+  const remaining = Math.max(
+    risk.estimatedTotal - risk.realisedTotal - risk.releasedTotal - risk.reducedTotal,
+    0,
+  );
 
   const detailRows: [string, string][] = [
     ["Category", risk.category],
@@ -66,7 +77,13 @@ export function RiskDetail() {
     ["Next Review", `${formatDate(risk.nextReviewDate)}${reviewOverdue ? " — overdue" : ""}`],
   ];
 
-  const onClose = async () => {
+  const onCloseRisk = async () => {
+    // With nothing left to release, close directly; otherwise route through the
+    // update workflow so the remaining exposure is released and recorded.
+    if (remaining > 0) {
+      setUpdate({ closing: true });
+      return;
+    }
     setClosing(true);
     try {
       await closeRisk(risk.riskReference);
@@ -115,6 +132,15 @@ export function RiskDetail() {
         onCancel={() => setConfirmArchive(false)}
       />
 
+      <RiskUpdateDialog
+        open={update !== null}
+        risk={risk}
+        defaultType={update?.closing ? "Released" : "Realised"}
+        prefillRemaining={update?.closing ?? false}
+        defaultClose={update?.closing ?? false}
+        onClose={() => setUpdate(null)}
+      />
+
       <PageHeader
         title={`Risk Detail – ${risk.riskReference}`}
         action={
@@ -138,10 +164,15 @@ export function RiskDetail() {
                 <Btn variant="default" icon={Archive} onClick={() => setConfirmArchive(true)}>
                   Archive
                 </Btn>
-                {risk.status !== "Closed" && (
-                  <Btn variant="dark" icon={CheckCircle2} onClick={() => void onClose()} loading={closing}>
-                    Close Risk
-                  </Btn>
+                {!closed && (
+                  <>
+                    <Btn variant="primary" icon={Plus} onClick={() => setUpdate({ closing: false })}>
+                      Log Update
+                    </Btn>
+                    <Btn variant="dark" icon={CheckCircle2} onClick={() => void onCloseRisk()} loading={closing}>
+                      Close Risk
+                    </Btn>
+                  </>
                 )}
               </>
             )}
@@ -174,6 +205,9 @@ export function RiskDetail() {
           <Pill level={risk.level} />
           <span style={{ fontWeight: 700, color: s.c, fontSize: 15 }}>
             {risk.riskReference} – {risk.title}
+          </span>
+          <span style={{ marginLeft: "auto" }}>
+            <RiskStatusText status={risk.status} />
           </span>
         </div>
         <div style={{ fontSize: 12, color: T.textSec, marginTop: 6 }}>
@@ -260,23 +294,37 @@ export function RiskDetail() {
         </div>
       </div>
 
-      <Card style={{ padding: 18 }}>
-        <SectionTitle sub={`Estimated exposure drawdown · ${profileRangeLabel(risk.costProfile)}`}>
-          Cost Profile
+      {/* Cost position + drawdown */}
+      <Card style={{ padding: 18, marginBottom: 16 }}>
+        <SectionTitle sub={`Live position vs forecast · ${profileRangeLabel(risk.costProfile)}`}>
+          Cost Position
         </SectionTitle>
-        <div style={{ display: "flex", gap: 24, marginBottom: 10 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            gap: 10,
+            marginBottom: 12,
+          }}
+        >
           {([
-            ["Estimated", risk.estimatedTotal, T.brand],
-            ["Released", risk.releasedTotal, T.low],
-            ["Realised", risk.realisedTotal, T.high],
-          ] as const).map(([l, v, c]) => (
-            <div key={l}>
-              <div style={{ fontSize: 11.5, color: T.textSec }}>{l}</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: c }}>{moneyFull(v)}</div>
+            ["Estimated", risk.estimatedTotal, T.text, "Forecast risk value"],
+            ["Open Exposure", remaining, T.brand, "Still at risk"],
+            ["Realised", risk.realisedTotal, RISK_EVENT_STYLES.Realised.c, "Cost incurred"],
+            ["Released", risk.releasedTotal, RISK_EVENT_STYLES.Released.c, "Handed back"],
+            ["Reduced", risk.reducedTotal, T.textSec, "Estimate revised down"],
+          ] as const).map(([l, v, c, sub]) => (
+            <div
+              key={l}
+              style={{ padding: 12, background: T.bg, borderRadius: 6, borderLeft: `3px solid ${c}` }}
+            >
+              <div style={{ fontSize: 11, color: T.textSec }}>{l}</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: c }}>{moneyFull(v)}</div>
+              <div style={{ fontSize: 10.5, color: T.textTer }}>{sub}</div>
             </div>
           ))}
         </div>
-        <ResponsiveContainer width="100%" height={190}>
+        <ResponsiveContainer width="100%" height={200}>
           <LineChart data={profile}>
             <CartesianGrid vertical={false} stroke={T.strokeSubtle} />
             <XAxis
@@ -289,17 +337,138 @@ export function RiskDetail() {
             />
             <YAxis tick={{ fontSize: 11, fill: T.textTer }} axisLine={false} tickLine={false} width={28} />
             <Tooltip formatter={(v: number) => `${currencySymbol()}${v.toFixed(2)}m`} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line
               type="monotone"
-              dataKey="est"
-              name={`Estimated (${currencySymbol()}m)`}
-              stroke={T.brand}
-              strokeWidth={2.4}
-              dot={{ r: 2.5 }}
+              dataKey="forecast"
+              name="Forecast provision"
+              stroke={T.textTer}
+              strokeWidth={1.6}
+              strokeDasharray="4 4"
+              dot={false}
             />
+            <Line type="monotone" dataKey="exposure" name="Open exposure" stroke={T.brand} strokeWidth={2.4} dot={{ r: 2 }} />
+            <Line type="monotone" dataKey="realised" name="Realised" stroke={RISK_EVENT_STYLES.Realised.c} strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="released" name="Released" stroke={RISK_EVENT_STYLES.Released.c} strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </Card>
+
+      {/* Risk change log */}
+      <Card style={{ padding: 18 }}>
+        <SectionTitle sub="Realised, released and reduced updates recorded against this risk">
+          Risk Change Log {risk.events.length > 0 && `(${risk.events.length})`}
+        </SectionTitle>
+        <ChangeLog events={risk.events} createdAt={risk.createdAt} estimated={risk.estimatedTotal} />
+      </Card>
+    </div>
+  );
+}
+
+/* Newest-first ledger timeline, with the risk's creation as the final entry. */
+function ChangeLog({
+  events,
+  createdAt,
+  estimated,
+}: {
+  events: RiskEvent[];
+  createdAt: string;
+  estimated: number;
+}) {
+  const ordered = [...events].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {ordered.map((e) => {
+        const st = RISK_EVENT_STYLES[e.type];
+        return (
+          <div
+            key={e.id}
+            style={{
+              display: "flex",
+              gap: 12,
+              padding: "12px 0",
+              borderTop: `1px solid ${T.strokeSubtle}`,
+              fontSize: 13,
+            }}
+          >
+            <span
+              style={{
+                flexShrink: 0,
+                alignSelf: "flex-start",
+                color: st.c,
+                background: st.bg,
+                border: `1px solid ${st.c}33`,
+                borderRadius: 4,
+                padding: "2px 9px",
+                fontSize: 11.5,
+                fontWeight: 700,
+              }}
+            >
+              {e.type}
+            </span>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontWeight: 700, color: st.c, fontSize: 14 }}>{moneyFull(e.amount)}</span>
+                {e.closedRisk && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: T.textSec,
+                      border: `1px solid ${T.stroke}`,
+                      borderRadius: 3,
+                      padding: "1px 5px",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Risk closed
+                  </span>
+                )}
+                <span style={{ marginLeft: "auto", color: T.textTer, fontSize: 12 }}>
+                  {formatDate(e.date)}
+                </span>
+              </div>
+              {e.note && (
+                <div style={{ fontSize: 12.5, color: T.textSec, marginTop: 3, lineHeight: 1.5 }}>
+                  {e.note}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: T.textTer, marginTop: 3 }}>by {e.actor}</div>
+            </div>
+          </div>
+        );
+      })}
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          padding: "12px 0",
+          borderTop: `1px solid ${T.strokeSubtle}`,
+          fontSize: 13,
+        }}
+      >
+        <span
+          style={{
+            flexShrink: 0,
+            alignSelf: "flex-start",
+            color: T.textSec,
+            background: T.bg,
+            border: `1px solid ${T.stroke}`,
+            borderRadius: 4,
+            padding: "2px 9px",
+            fontSize: 11.5,
+            fontWeight: 700,
+          }}
+        >
+          Logged
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, color: T.text }}>
+            Risk logged with an estimated value of {moneyFull(estimated)}
+          </div>
+          <div style={{ fontSize: 11, color: T.textTer, marginTop: 3 }}>{formatDate(createdAt)}</div>
+        </div>
+      </div>
     </div>
   );
 }

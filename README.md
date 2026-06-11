@@ -16,8 +16,18 @@ environment variable.
   filters, sortable columns, pagination, archived-record toggle, CSV export
 - 2-step "Log Risk" wizard with a calendar-anchored cost profile: choose a start
   month and duration (1–60 months), Even or Custom distribution
+- **Update & close-risk workflow** — log draw-down events against a risk as its
+  position becomes clearer:
+  - **Realised** — the risk happened: record the actual cost and the date
+  - **Released** — it won't happen (in full or part): hand the value back, and
+    optionally close the risk
+  - **Reduced** — revise the estimate down while the risk stays open
+  Every event is dated and recorded in the risk's **change log**, and the
+  realised / released / reduced totals (and the live open exposure) derive from
+  the ledger — so charts and reports reflect what actually happened, when
 - Risk detail — severity banner, full attributes, mitigation, next review date,
-  linked change requests, drawdown chart, Close / Archive / Restore actions
+  linked change requests, cost-position cards, exposure-vs-forecast drawdown
+  chart, change log, Log Update / Close / Archive / Restore actions
 - Archive (soft-delete) with restore — archived risks keep their history but are
   excluded from dashboards and default views
 
@@ -34,10 +44,9 @@ environment variable.
 - Risk ↔ change linking is bidirectional and visible from both detail views
 
 **Customisation (Settings)**
-- Add / rename / delete risk categories, programme categories, workstreams and
-  change categories — values in use by records are protected
-- Editable 5×5 scoring matrix: click a cell to re-band it per client risk
-  appetite; saving recalculates every stored risk's level
+- Add / rename / delete risk categories, programme categories, workstreams,
+  change categories and **risk statuses** — values in use by records are
+  protected, and the workflow-critical "Open" / "Closed" statuses are locked
 - Project management — add, rename, archive and restore projects
 - Display currency (GBP, EUR, USD, AUD, CAD) applied to every monetary value
 - In mock mode all configuration persists to localStorage; in live mode it is
@@ -86,6 +95,7 @@ All payload shapes are the TypeScript interfaces in `src/types/domain.ts` and
 | GET | `/api/risks/:ref` | — | `Risk` |
 | POST | `/api/risks` | `RiskInput` | `Risk` (server assigns reference, score, level, timestamps) |
 | PATCH | `/api/risks/:ref` | `Partial<RiskInput>` | `Risk` |
+| POST | `/api/risks/:ref/events` | `RiskEventInput` | `Risk` (appends a ledger event, recomputes derived totals, optionally closes) |
 | POST | `/api/risks/:ref/close` | — | `Risk` |
 | POST | `/api/risks/:ref/archive` | — | `Risk` |
 | POST | `/api/risks/:ref/restore` | — | `Risk` |
@@ -124,10 +134,15 @@ mixed durations and start dates aggregate correctly.
 The backend must implement these (the mock layer shows the expected behaviour
 in `src/api/mock/mockServices.ts`):
 
-- `score = likelihood × impact`; `level` from the **configured** 5×5 band
-  matrix (`AppConfig.matrix`, `grid[impact][likelihood]`)
-- `PUT /api/config` must recompute every stored risk's `level` when the matrix
-  changes (the client refetches risks after saving config)
+- `score = likelihood × impact`; `level` from the 5×5 band matrix
+  (`AppConfig.matrix`, `grid[impact][likelihood]`)
+- A risk's `realisedTotal`, `releasedTotal` and `reducedTotal` are **derived**
+  from its `events` ledger (sum by type). `POST /api/risks/:ref/events` appends
+  an entry, recomputes these totals, and sets `status = "Closed"` when the event
+  has `closeRisk: true`. The ledger is the source of truth — these totals are
+  never written directly via create/update
+- `AppConfig.riskStatuses` is client-configurable; "Open" and "Closed" must
+  always be present (the server sanitises the list to guarantee this)
 - Reference generation (`R###` / `C###`)
 - Change workflow transitions (legal moves in `TRANSITIONS`) and approval history
 - `DELETE /api/changes/:ref` only for `Draft` status, and it must strip the

@@ -18,6 +18,7 @@ import type {
   Project,
   ProjectInput,
   Risk,
+  RiskEventInput,
   RiskInput,
 } from "../types/domain";
 import { setCurrency } from "../utils/format";
@@ -43,6 +44,7 @@ interface AppDataValue {
   refresh: () => Promise<void>;
   createRisk: (input: RiskInput) => Promise<Risk>;
   updateRisk: (ref: string, patch: Partial<RiskInput>) => Promise<Risk>;
+  addRiskEvent: (ref: string, event: RiskEventInput) => Promise<Risk>;
   closeRisk: (ref: string) => Promise<Risk>;
   archiveRisk: (ref: string) => Promise<Risk>;
   restoreRisk: (ref: string) => Promise<Risk>;
@@ -147,6 +149,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       },
       updateRisk: async (ref, patch) => {
         const rec = await services.risks.update(ref, patch);
+        upsertRisk(rec);
+        return rec;
+      },
+      addRiskEvent: async (ref, event) => {
+        const rec = await services.risks.addEvent(ref, event);
         upsertRisk(rec);
         return rec;
       },
