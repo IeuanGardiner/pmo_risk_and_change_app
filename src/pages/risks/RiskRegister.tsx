@@ -105,10 +105,13 @@ export function RiskRegister() {
   const exportCsv = () =>
     downloadCsv(
       `risk-register-${scope.toLowerCase()}.csv`,
-      ["Reference", "Title", "Scope", "Category", "Workstream", "Level", "Score", "Likelihood", "Impact", "Owner", "Status", "Target Date", "Next Review", "Project", "Profile Start", "Profile Months", "Estimated", "Realised", "Released", "Reduced", "Open Exposure", "Archived"],
+      ["Reference", "Title", "Scope", "Category", "Workstream", "Level", "Score", "Likelihood", "Impact", "Target Likelihood", "Target Impact", "Target Score", "Target Level", "Proximity", "Schedule Impact Days", "Owner", "Status", "Target Date", "Next Review", "Project", "Profile Start", "Profile Months", "Estimated", "Realised", "Released", "Reduced", "Open Exposure", "Archived"],
       sorted.map((r) => [
         r.riskReference, r.title, r.scope, r.category, r.workstream ?? "", r.level, r.score,
-        LIKELIHOODS[r.likelihood], IMPACTS[r.impact], r.owner, r.status, r.targetDate ?? "",
+        LIKELIHOODS[r.likelihood], IMPACTS[r.impact],
+        r.targetLikelihood ?? "", r.targetImpact ?? "", r.targetScore ?? "", r.targetLevel ?? "",
+        r.proximity ?? "", r.scheduleImpactDays,
+        r.owner, r.status, r.targetDate ?? "",
         r.nextReviewDate ?? "",
         scope === "Project" ? projectName(r.projectId) : "",
         r.costProfile.startMonth, r.costProfile.periods.length,
@@ -357,9 +360,14 @@ export function RiskRegister() {
                 <td style={{ padding: "11px 14px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <Pill level={r.level} small />
-                    <span style={{ fontSize: 11, color: T.textTer }}>
-                      {r.score} ({r.likelihood}×{r.impact})
-                    </span>
+                    <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.3 }}>
+                      <span style={{ fontSize: 11, color: T.textTer }}>
+                        {r.score} ({r.likelihood}×{r.impact})
+                      </span>
+                      {r.targetLevel && (
+                        <span style={{ fontSize: 10.5, color: T.textTer }}>→ {r.targetLevel}</span>
+                      )}
+                    </div>
                   </div>
                 </td>
                 <td style={{ padding: "11px 14px", color: T.textSec }}>{r.owner}</td>

@@ -9,8 +9,15 @@ import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { LEVEL_STYLES, T } from "../../theme/tokens";
-import type { CostProfile, Rating, RiskInput, Scope } from "../../types/domain";
-import { calcLevel, IMPACTS, LIKELIHOODS, OPEN_STATUS } from "../../types/lookups";
+import type { CostProfile, Rating, RiskInput, RiskProximity, Scope } from "../../types/domain";
+import {
+  calcLevel,
+  calcScore,
+  IMPACTS,
+  LIKELIHOODS,
+  OPEN_STATUS,
+  RISK_PROXIMITIES,
+} from "../../types/lookups";
 import { currentMonthKey, evenProfile } from "../../utils/calendar";
 import { currencySymbol, parseNum } from "../../utils/format";
 
@@ -23,6 +30,10 @@ interface FormState {
   owner: string;
   likelihood: string;
   impact: string;
+  targetLikelihood: string;
+  targetImpact: string;
+  proximity: string;
+  scheduleImpactDays: string;
   status: string;
   targetDate: string;
   nextReviewDate: string;
@@ -42,6 +53,10 @@ const emptyForm = (defaultProjectId: string): FormState => ({
   owner: "",
   likelihood: "",
   impact: "",
+  targetLikelihood: "",
+  targetImpact: "",
+  proximity: "",
+  scheduleImpactDays: "",
   status: OPEN_STATUS,
   targetDate: "",
   nextReviewDate: "",
@@ -59,6 +74,31 @@ const RATING_OPTIONS = (labels: Record<Rating, string>) =>
 const withCurrent = (options: string[], current: string): string[] =>
   current && !options.includes(current) ? [...options, current] : options;
 
+/** Target ratings are both-or-neither — surfaced inline and as a save guard. */
+const targetPairError = (f: FormState): string | null =>
+  !!f.targetLikelihood !== !!f.targetImpact
+    ? "Set both target ratings, or leave both blank"
+    : null;
+
+/** Derived current/target scoring for the inline "Target Risk Level" row. */
+function targetSummary(f: FormState, matrix: Parameters<typeof calcLevel>[0]) {
+  const hasCurrent = !!f.likelihood && !!f.impact;
+  const hasTarget = !!f.targetLikelihood && !!f.targetImpact;
+  if (!hasTarget) return null;
+  const tl = +f.targetLikelihood as Rating;
+  const ti = +f.targetImpact as Rating;
+  const targetScore = calcScore(tl, ti);
+  const targetLevel = calcLevel(matrix, tl, ti);
+  const currentScore = hasCurrent ? calcScore(+f.likelihood as Rating, +f.impact as Rating) : null;
+  return {
+    targetScore,
+    targetLevel,
+    currentScore,
+    delta: currentScore != null ? targetScore - currentScore : null,
+    higher: currentScore != null && targetScore > currentScore,
+  };
+}
+
 function toInput(f: FormState): RiskInput {
   const likelihood = +f.likelihood as Rating;
   const impact = +f.impact as Rating;
@@ -73,6 +113,10 @@ function toInput(f: FormState): RiskInput {
     owner: f.owner.trim(),
     likelihood,
     impact,
+    targetLikelihood: f.targetLikelihood ? (+f.targetLikelihood as Rating) : null,
+    targetImpact: f.targetImpact ? (+f.targetImpact as Rating) : null,
+    proximity: (f.proximity || null) as RiskProximity | null,
+    scheduleImpactDays: parseNum(f.scheduleImpactDays),
     status: f.status,
     targetDate: f.targetDate || null,
     nextReviewDate: f.nextReviewDate || null,
@@ -100,6 +144,44 @@ function validateValues(f: FormState): Record<string, string> {
     }
   }
   return errors;
+}
+
+/** Shared "Target Risk Level" row + reduction caption + amber over-target hint. */
+function TargetLevelRow({
+  summary,
+  error,
+}: {
+  summary: ReturnType<typeof targetSummary>;
+  error: string | null;
+}) {
+  if (error) {
+    return (
+      <div role="alert" style={{ fontSize: 12, color: T.critical, fontWeight: 600, marginTop: 10 }}>
+        {error}
+      </div>
+    );
+  }
+  if (!summary) return null;
+  const { targetScore, targetLevel, currentScore, delta, higher } = summary;
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: T.textSec }}>Target Risk Level:</span>
+        <Pill level={targetLevel} />
+        {currentScore != null && delta != null && (
+          <span style={{ fontSize: 12, color: T.textTer }}>
+            {currentScore} → {targetScore} ({delta > 0 ? "+" : delta < 0 ? "−" : "±"}
+            {Math.abs(delta)})
+          </span>
+        )}
+      </div>
+      {higher && (
+        <div style={{ fontSize: 12, color: T.high, fontWeight: 600, marginTop: 6 }}>
+          Target is higher than the current assessment — check this is intended
+        </div>
+      )}
+    </>
+  );
 }
 
 /* ============================== Add (wizard) ============================== */
@@ -131,7 +213,13 @@ export function AddRisk() {
   const cats =
     f.scope === "Project" ? config.projectRiskCategories : config.programRiskCategories;
   const step1Valid =
-    f.title.trim() && f.description.trim() && f.category && f.owner.trim() && f.likelihood && f.impact;
+    f.title.trim() &&
+    f.description.trim() &&
+    f.category &&
+    f.owner.trim() &&
+    f.likelihood &&
+    f.impact &&
+    !targetPairError(f);
   const errors = attempted ? validateValues(f) : {};
 
   const save = async () => {
@@ -265,6 +353,30 @@ export function AddRisk() {
                   placeholder="Select impact…"
                 />
               </Field>
+              <Field label="Target Likelihood (post-mitigation)">
+                <Select
+                  value={f.targetLikelihood}
+                  onChange={(v) => set("targetLikelihood", v)}
+                  options={RATING_OPTIONS(LIKELIHOODS)}
+                  placeholder="Not assessed"
+                />
+              </Field>
+              <Field label="Target Impact (post-mitigation)">
+                <Select
+                  value={f.targetImpact}
+                  onChange={(v) => set("targetImpact", v)}
+                  options={RATING_OPTIONS(IMPACTS)}
+                  placeholder="Not assessed"
+                />
+              </Field>
+              <Field label="Proximity">
+                <Select
+                  value={f.proximity}
+                  onChange={(v) => set("proximity", v)}
+                  options={RISK_PROXIMITIES}
+                  placeholder="Select proximity…"
+                />
+              </Field>
               <Field label="Status" required>
                 <Select
                   value={f.status}
@@ -298,6 +410,7 @@ export function AddRisk() {
                 <span style={{ fontSize: 12, color: T.textTer }}>Set likelihood &amp; impact</span>
               )}
             </div>
+            <TargetLevelRow summary={targetSummary(f, config.matrix)} error={targetPairError(f)} />
 
             <Divider />
             <SubHead>Mitigation &amp; Response</SubHead>
@@ -353,8 +466,14 @@ export function AddRisk() {
                   }}
                 />
               </Field>
-              <Field label="Risk Reference">
-                <Input disabled placeholder={`Auto-generated: ${nextRef}`} />
+              <Field label="Schedule Impact (days)">
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="Potential programme impact…"
+                  value={f.scheduleImpactDays}
+                  onChange={(e) => set("scheduleImpactDays", e.target.value)}
+                />
               </Field>
             </Grid2>
 
@@ -406,6 +525,10 @@ export function EditRisk() {
           owner: risk.owner,
           likelihood: String(risk.likelihood),
           impact: String(risk.impact),
+          targetLikelihood: risk.targetLikelihood != null ? String(risk.targetLikelihood) : "",
+          targetImpact: risk.targetImpact != null ? String(risk.targetImpact) : "",
+          proximity: risk.proximity ?? "",
+          scheduleImpactDays: risk.scheduleImpactDays ? String(risk.scheduleImpactDays) : "",
           status: risk.status,
           targetDate: risk.targetDate ?? "",
           nextReviewDate: risk.nextReviewDate ?? "",
@@ -444,10 +567,11 @@ export function EditRisk() {
   const errors = attempted ? validateValues(f) : {};
 
   const save = async () => {
+    const targetErr = targetPairError(f);
     const issues = validateValues(f);
-    if (Object.keys(issues).length > 0) {
+    if (targetErr || Object.keys(issues).length > 0) {
       setAttempted(true);
-      toast.error("Fix the highlighted value fields before saving");
+      toast.error(targetErr ?? "Fix the highlighted value fields before saving");
       return;
     }
     setSaving(true);
@@ -542,6 +666,30 @@ export function EditRisk() {
               options={RATING_OPTIONS(IMPACTS)}
             />
           </Field>
+          <Field label="Target Likelihood (post-mitigation)">
+            <Select
+              value={f.targetLikelihood}
+              onChange={(v) => set("targetLikelihood", v)}
+              options={RATING_OPTIONS(LIKELIHOODS)}
+              placeholder="Not assessed"
+            />
+          </Field>
+          <Field label="Target Impact (post-mitigation)">
+            <Select
+              value={f.targetImpact}
+              onChange={(v) => set("targetImpact", v)}
+              options={RATING_OPTIONS(IMPACTS)}
+              placeholder="Not assessed"
+            />
+          </Field>
+          <Field label="Proximity">
+            <Select
+              value={f.proximity}
+              onChange={(v) => set("proximity", v)}
+              options={RISK_PROXIMITIES}
+              placeholder="Select proximity…"
+            />
+          </Field>
           <Field label="Status" required>
             <Select
               value={f.status}
@@ -566,10 +714,11 @@ export function EditRisk() {
           </span>
           <Pill level={level} />
         </div>
+        <TargetLevelRow summary={targetSummary(f, config.matrix)} error={targetPairError(f)} />
 
         <Divider />
         <SubHead>Risk Value ({currencySymbol()})</SubHead>
-        <div style={{ maxWidth: 300 }}>
+        <Grid2>
           <Field label="Estimated Risk Value" error={errors.estimatedTotal}>
             <Input
               type="number"
@@ -591,7 +740,16 @@ export function EditRisk() {
               }}
             />
           </Field>
-        </div>
+          <Field label="Schedule Impact (days)">
+            <Input
+              type="number"
+              inputMode="numeric"
+              placeholder="Potential programme impact…"
+              value={f.scheduleImpactDays}
+              onChange={(e) => set("scheduleImpactDays", e.target.value)}
+            />
+          </Field>
+        </Grid2>
         <div style={{ fontSize: 12, color: T.textSec, marginTop: 8, lineHeight: 1.5 }}>
           Realised, released and reduced values are recorded against the risk over time using{" "}
           <strong>Log Update</strong> on the risk detail page — they are no longer entered here.
