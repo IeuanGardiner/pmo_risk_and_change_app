@@ -1,4 +1,10 @@
-import type { ChangePriority, ChangeStatus, RiskEventType, RiskLevel } from "../types/domain";
+import type {
+  ChangePriority,
+  ChangeStatus,
+  ProjectStatus,
+  RiskEventType,
+  RiskLevel,
+} from "../types/domain";
 
 /* ----------------------------------------------------------------------------
    Design tokens. Every colour points at a CSS custom property declared in
@@ -116,6 +122,14 @@ export const CHANGE_STATUS_STYLES: Record<ChangeStatus, { c: string; bg: string 
   Approved: { c: T.low, bg: T.lowBg },
   Rejected: { c: T.critical, bg: T.criticalBg },
   Implemented: { c: T.teal, bg: "#EBF5F5" },
+};
+
+export const PROJECT_STATUS_STYLES: Record<ProjectStatus, { c: string; bg: string }> = {
+  Active: { c: T.low, bg: T.lowBg },
+  Pipeline: { c: T.brand, bg: T.brandBg },
+  "On Hold": { c: T.medium, bg: T.mediumBg },
+  Complete: { c: T.teal, bg: alpha(T.teal, 12) },
+  Cancelled: { c: T.textSec, bg: alpha(T.textSec, 12) },
 };
 
 export const PRIORITY_COLORS: Record<ChangePriority, string> = {

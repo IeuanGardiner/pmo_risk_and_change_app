@@ -38,7 +38,10 @@ interface AppDataValue {
   changes: ChangeRequest[];
   /** All projects, including archived. Prefer `activeProjects` for pickers. */
   projects: Project[];
+  /** Not archived — the maintainable, "live" set. */
   activeProjects: Project[];
+  /** Not archived and not Cancelled — the set offered in record pickers. */
+  pickerProjects: Project[];
   config: AppConfig;
   user: AppUser | null;
   refresh: () => Promise<void>;
@@ -130,6 +133,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const activeRisks = useMemo(() => risks.filter((r) => !r.archived), [risks]);
   const activeProjects = useMemo(() => projects.filter((p) => !p.archived), [projects]);
+  const pickerProjects = useMemo(
+    () => activeProjects.filter((p) => p.status !== "Cancelled"),
+    [activeProjects],
+  );
 
   const value = useMemo<AppDataValue>(
     () => ({
@@ -140,6 +147,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       changes,
       projects,
       activeProjects,
+      pickerProjects,
       config,
       user,
       refresh,
@@ -226,7 +234,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return rec;
       },
     }),
-    [loading, error, risks, activeRisks, changes, projects, activeProjects, config, user, refresh],
+    [loading, error, risks, activeRisks, changes, projects, activeProjects, pickerProjects, config, user, refresh],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
-import { RotateCcw, Save } from "lucide-react";
+import { FolderKanban, RotateCcw, Save } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Btn, Card, Field, PageHeader, SectionTitle, Select } from "../../components/ui";
+import { useAuth } from "../../auth/AuthContext";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { isMockMode } from "../../api";
@@ -9,10 +11,11 @@ import { alpha, T } from "../../theme/tokens";
 import { CURRENCIES, SYSTEM_RISK_STATUSES, type AppConfig } from "../../types/config";
 import { BrandingEditor } from "./BrandingEditor";
 import { LookupListEditor } from "./LookupListEditor";
-import { ProjectsManager } from "./ProjectsManager";
 
 export function SettingsPage() {
-  const { risks, changes, config, updateConfig, user } = useAppData();
+  const { risks, changes, projects, config, updateConfig, user } = useAppData();
+  const { can } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
   usePageTitle("Settings");
   const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
@@ -34,6 +37,7 @@ export function SettingsPage() {
     workstream: (v: string) => risks.filter((r) => r.workstream === v).length,
     changeCategory: (v: string) => changes.filter((c) => c.category === v).length,
     riskStatus: (v: string) => risks.filter((r) => r.status === v).length,
+    projectType: (v: string) => projects.filter((p) => p.type === v).length,
   };
 
   const save = async () => {
@@ -52,7 +56,7 @@ export function SettingsPage() {
     <div style={{ padding: 24, overflow: "auto", position: "relative", minHeight: "100%" }}>
       <PageHeader
         title="Settings"
-        subtitle="Tailor the app per client — branding, scoring model, lookups, projects and currency"
+        subtitle="Tailor the app per client — branding, scoring model, lookups and currency"
       />
 
       <Card style={{ padding: 18, marginBottom: 16 }}>
@@ -125,7 +129,17 @@ export function SettingsPage() {
           </Card>
 
           <Card style={{ padding: 18 }}>
-            <ProjectsManager />
+            <SectionTitle sub="Projects are now maintained in their own admin module">
+              Projects
+            </SectionTitle>
+            <div style={{ fontSize: 13, color: T.textSec, lineHeight: 1.6, marginBottom: 14 }}>
+              Projects have moved — manage them under <strong>General → Projects</strong>.
+            </div>
+            {can("projects:manage") && (
+              <Btn variant="default" icon={FolderKanban} onClick={() => navigate("/projects")}>
+                Go to Projects
+              </Btn>
+            )}
           </Card>
         </div>
 
@@ -197,6 +211,15 @@ export function SettingsPage() {
             values={draft.changeCategories}
             usageCount={usage.changeCategory}
             onChange={(v) => setPart("changeCategories", v)}
+          />
+        </Card>
+        <Card style={{ padding: 18 }}>
+          <LookupListEditor
+            title="Project types"
+            sub="Types offered when maintaining projects"
+            values={draft.projectTypes}
+            usageCount={usage.projectType}
+            onChange={(v) => setPart("projectTypes", v)}
           />
         </Card>
       </div>

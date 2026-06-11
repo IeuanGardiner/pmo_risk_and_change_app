@@ -43,6 +43,17 @@ environment variable.
   linked risks, cost impact profile, **Delete Draft** for unsubmitted changes
 - Risk ↔ change linking is bidirectional and visible from both detail views
 
+**Projects module**
+- Dedicated **General → Projects** register (permission `projects:manage`, held
+  by Admin, Risk Manager and Change Manager) — replaces the old Settings card
+- Add / edit projects in a modal with code, name, type, client, project manager,
+  status, start/end dates, value and description; archive/restore as a soft
+  delete that keeps records resolvable
+- Status, type and "show archived" filters, sortable columns, live Risks /
+  Changes counts per project, money formatting and CSV export
+- Pickers offer active, non-`Cancelled` projects (archived/cancelled projects
+  stay resolvable on existing records)
+
 **Branding & appearance (Settings)**
 - White-label the app per client: product name, strapline and logo (upload a
   PNG/JPEG/SVG/WebP, ≤512 KB) — e.g. rename "RiskShield" to "Company X Risk &
@@ -56,9 +67,9 @@ environment variable.
 
 **Customisation (Settings)**
 - Add / rename / delete risk categories, programme categories, workstreams,
-  change categories and **risk statuses** — values in use by records are
-  protected, and the workflow-critical "Open" / "Closed" statuses are locked
-- Project management — add, rename, archive and restore projects
+  change categories, **project types** and **risk statuses** — values in use by
+  records are protected, and the workflow-critical "Open" / "Closed" statuses are
+  locked
 - Display currency (GBP, EUR, USD, AUD, CAD) applied to every monetary value
 - In mock mode all configuration persists to localStorage; in live mode it is
   saved via `PUT /api/config`
@@ -126,10 +137,17 @@ All payload shapes are the TypeScript interfaces in `src/types/domain.ts` and
 | POST | `/api/changes/:ref/transition` | `{ action, note? }` | `ChangeRequest` (server enforces the workflow + appends history) |
 | DELETE | `/api/changes/:ref` | — | 204 (Draft changes only) |
 | GET | `/api/projects` | — | `Project[]` (including archived) |
-| POST | `/api/projects` | `ProjectInput` | `Project` |
-| PATCH | `/api/projects/:id` | `Partial<ProjectInput>` | `Project` |
+| POST | `/api/projects` | `ProjectInput` | `Project` (server assigns id, `archived: false`, timestamps) |
+| PATCH | `/api/projects/:id` | `Partial<ProjectInput>` | `Project` (re-stamps `updatedAt`) |
 | POST | `/api/projects/:id/archive` | — | `Project` |
 | POST | `/api/projects/:id/restore` | — | `Project` |
+
+`ProjectInput` is the full project record minus the server-owned fields:
+`code`, `name`, `type`, `client`, `projectManager`, `status`
+(`Pipeline`/`Active`/`On Hold`/`Complete`/`Cancelled`, defaults to `Active` on
+create), `startDate`, `endDate`, `value` and `description`. `archived` is the
+soft-delete flag and is independent of `status` (a `Complete` project may still
+be unarchived so its records resolve and filter normally).
 | GET | `/api/config` | — | `AppConfig` (incl. `branding`) |
 | PUT | `/api/config` | `AppConfig` | `AppConfig` |
 | POST | `/api/branding/logo` | `multipart/form-data` field `logo` (image file) | `{ "url": string }` |
@@ -170,6 +188,11 @@ in `src/api/mock/mockServices.ts`):
   reference from any linked risks' `linkedChangeRefs`
 - Keeping `risk.linkedChangeRefs` consistent with `change.linkedRiskRefs`
 - `archived` flags are server-owned — set only via the archive/restore endpoints
+- Projects: `name` and `code` are required (trimmed non-empty); `code` is unique
+  case-insensitively across all projects (reject on clash); `endDate` must not be
+  before `startDate` when both are set; `value`, if set, must be `≥ 0`;
+  `createdAt`/`updatedAt` are server-stamped (`updatedAt` re-stamped on every
+  update)
 - Validate cost profiles: `startMonth` is `yyyy-mm`, `1 ≤ periods.length ≤ 60`
 - **Branding** lives in `AppConfig.branding` (`appName`, `tagline`, `brandColor`,
   `logoUrl`, `defaultTheme`). `POST /api/branding/logo` stores the uploaded image
@@ -195,7 +218,9 @@ on fine-grained permissions:
   can add custom roles in **Administration → Roles & Permissions**. New roles
   start with zero permissions (least privilege) and any role can be duplicated
   as a starting point. System roles are immutable; custom roles in use cannot
-  be deleted.
+  be deleted. Admin, Risk Manager and Change Manager all hold `projects:manage`,
+  so a backend seeding the built-in roles must grant the same set (see
+  `SYSTEM_ROLES` in `src/types/auth.ts`).
 - **Users** hold one or more roles; their effective permissions are the union.
   Admins manage accounts in **Administration → Users** (invite, edit roles,
   suspend/reactivate, remove).
@@ -203,8 +228,8 @@ on fine-grained permissions:
 | Role | Risks | Changes | Reports | Administration |
 | --- | --- | --- | --- | --- |
 | Admin | full | full | view | settings, projects, users, roles |
-| Risk Manager | log, edit, close, archive/restore | view | view | — |
-| Change Manager | view | raise, edit, progress, approve/reject, delete drafts | view | — |
+| Risk Manager | log, edit, close, archive/restore | view | view | projects |
+| Change Manager | view | raise, edit, progress, approve/reject, delete drafts | view | projects |
 | Risk Editor | log, edit | view | view | — |
 | Change Editor | view | raise, edit, progress workflow | view | — |
 | Read Only | view | view | view | — |

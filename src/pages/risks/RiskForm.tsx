@@ -105,13 +105,13 @@ function validateValues(f: FormState): Record<string, string> {
 /* ============================== Add (wizard) ============================== */
 export function AddRisk() {
   const navigate = useNavigate();
-  const { risks, activeProjects, config, createRisk } = useAppData();
+  const { risks, pickerProjects, config, createRisk } = useAppData();
   const toast = useToast();
   usePageTitle("Add Risk");
   const [step, setStep] = useState<1 | 2>(1);
   const [saving, setSaving] = useState(false);
   const [attempted, setAttempted] = useState(false);
-  const [f, setF] = useState<FormState>(() => emptyForm(activeProjects[0]?.id ?? ""));
+  const [f, setF] = useState<FormState>(() => emptyForm(pickerProjects[0]?.id ?? ""));
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setF((p) => ({ ...p, [k]: v }));
@@ -243,7 +243,7 @@ export function AddRisk() {
                     <Select
                       value={f.projectId}
                       onChange={(v) => set("projectId", v)}
-                      options={activeProjects.map((p) => ({ value: p.id, label: p.name }))}
+                      options={pickerProjects.map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }))}
                       placeholder="Select project…"
                     />
                   </Field>
@@ -388,7 +388,7 @@ export function AddRisk() {
 export function EditRisk() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
-  const { risks, activeProjects, config, updateRisk } = useAppData();
+  const { risks, pickerProjects, config, updateRisk } = useAppData();
   const toast = useToast();
   const risk = risks.find((r) => r.riskReference === ref);
   usePageTitle(risk ? `Edit ${risk.riskReference}` : "Risk not found");
@@ -522,7 +522,7 @@ export function EditRisk() {
                 <Select
                   value={f.projectId}
                   onChange={(v) => set("projectId", v)}
-                  options={activeProjects.map((p) => ({ value: p.id, label: p.name }))}
+                  options={pickerProjects.map((p) => ({ value: p.id, label: `${p.name} (${p.code})` }))}
                   placeholder="Select project…"
                 />
               </Field>
