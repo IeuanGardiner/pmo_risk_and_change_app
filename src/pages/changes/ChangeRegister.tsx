@@ -4,6 +4,7 @@ import { ArrowRight, Download, Plus } from "lucide-react";
 import {
   Btn, Card, ChangeStatusPill, EmptyState, PageHeader, Pagination, PriorityText, Select, SortableTh,
 } from "../../components/ui";
+import { useAuth } from "../../auth/AuthContext";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useSortPage, type SortState } from "../../hooks/useSortPage";
 import { useAppData } from "../../store/AppData";
@@ -33,6 +34,7 @@ const INITIAL_SORT: SortState<SortKey> = { key: "updated", dir: "desc" };
 
 export function ChangeRegister() {
   const { changes, activeProjects } = useAppData();
+  const { can } = useAuth();
   const navigate = useNavigate();
   usePageTitle("Change Register");
   const [scope, setScope] = useState<Scope>("Project");
@@ -86,9 +88,11 @@ export function ChangeRegister() {
             <Btn variant="default" icon={Download} onClick={exportCsv}>
               Export
             </Btn>
-            <Btn variant="dark" icon={Plus} onClick={() => navigate("/changes/new")}>
-              Raise Change
-            </Btn>
+            {can("changes:create") && (
+              <Btn variant="dark" icon={Plus} onClick={() => navigate("/changes/new")}>
+                Raise Change
+              </Btn>
+            )}
           </div>
         }
       />

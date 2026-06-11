@@ -48,6 +48,8 @@ export function RiskDashboard() {
   const totalEst = activeRisks.reduce((a, r) => a + r.estimatedTotal, 0);
   const totalReleased = activeRisks.reduce((a, r) => a + r.releasedTotal, 0);
   const totalRealised = activeRisks.reduce((a, r) => a + r.realisedTotal, 0);
+  const totalReduced = activeRisks.reduce((a, r) => a + r.reducedTotal, 0);
+  const totalExposure = Math.max(totalEst - totalReleased - totalRealised - totalReduced, 0);
 
   const byCat = useMemo(
     () =>
@@ -243,12 +245,13 @@ export function RiskDashboard() {
         <Card style={{ padding: 18 }}>
           <SectionTitle>Cost Profile</SectionTitle>
           <div
-            style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 8 }}
+            style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 8 }}
           >
             {[
-              { l: "Total Estimated Risk", v: totalEst, c: T.critical, s: "Across all active risks" },
-              { l: "Total Released", v: totalReleased, c: T.brand, s: "Risks closed / retired" },
-              { l: "Total Realised", v: totalRealised, c: T.high, s: "Costs incurred to date" },
+              { l: "Estimated", v: totalEst, c: T.text, s: "Forecast across active risks" },
+              { l: "Open Exposure", v: totalExposure, c: T.brand, s: "Still at risk" },
+              { l: "Realised", v: totalRealised, c: T.critical, s: "Cost incurred to date" },
+              { l: "Released", v: totalReleased, c: T.low, s: "Value handed back" },
             ].map((x) => (
               <div
                 key={x.l}
@@ -277,9 +280,10 @@ export function RiskDashboard() {
               <YAxis tick={{ fontSize: 11, fill: c.textTer }} axisLine={false} tickLine={false} width={24} />
               <Tooltip formatter={(v: number) => `${currencySymbol()}${v.toFixed(2)}m`} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="est" name="Estimated" stroke={c.brand} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="rel" name="Released" stroke={c.low} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="real" name="Realised" stroke={c.high} strokeWidth={2} strokeDasharray="5 4" dot={false} />
+              <Line type="monotone" dataKey="exposure" name="Open exposure" stroke={c.brand} strokeWidth={2.2} dot={false} />
+              <Line type="monotone" dataKey="realised" name="Realised" stroke={c.critical} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="released" name="Released" stroke={c.low} strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="reduced" name="Reduced" stroke={c.medium} strokeWidth={2} strokeDasharray="5 4" dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </Card>

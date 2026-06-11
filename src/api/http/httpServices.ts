@@ -8,6 +8,7 @@ import type {
   RiskService,
   Services,
 } from "../services";
+import { authHeaders } from "./authToken";
 
 /* ============================================================================
    HTTP implementation — talks to the real backend. Activated by setting
@@ -16,8 +17,8 @@ import type {
 
 async function request<V>(baseUrl: string, path: string, init?: RequestInit): Promise<V> {
   const res = await fetch(`${baseUrl}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
     ...init,
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...init?.headers },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -38,6 +39,11 @@ export function createHttpServices(baseUrl: string): Services {
       api<Risk>(`/api/risks/${encodeURIComponent(ref)}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
+      }),
+    addEvent: (ref, event) =>
+      api<Risk>(`/api/risks/${encodeURIComponent(ref)}/events`, {
+        method: "POST",
+        body: JSON.stringify(event),
       }),
     close: (ref) => api<Risk>(`/api/risks/${encodeURIComponent(ref)}/close`, { method: "POST" }),
     archive: (ref) =>

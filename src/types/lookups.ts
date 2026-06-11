@@ -1,4 +1,4 @@
-import type { ChangePriority, ChangeStatus, Rating, RiskLevel, RiskStatus } from "./domain";
+import type { ChangePriority, ChangeStatus, Rating, RiskEventType, RiskLevel } from "./domain";
 import type { MatrixGrid } from "./config";
 
 /* ---- Likelihood / impact scales ---------------------------------------- */
@@ -26,7 +26,20 @@ export const calcLevel = (grid: MatrixGrid, likelihood: Rating, impact: Rating):
   grid[impact]?.[likelihood] ?? "Low";
 
 export const RISK_LEVELS: RiskLevel[] = ["Critical", "High", "Medium", "Low"];
-export const RISK_STATUSES: RiskStatus[] = ["Open", "Mitigating", "Monitoring", "Closed"];
+
+/* ---- Risk workflow ------------------------------------------------------- */
+/** The status the close workflow drives risks into. */
+export const CLOSED_STATUS = "Closed";
+/** The status new risks are created in. */
+export const OPEN_STATUS = "Open";
+export const isClosed = (status: string): boolean => status === CLOSED_STATUS;
+
+export const RISK_EVENT_TYPES: RiskEventType[] = ["Realised", "Released", "Reduced"];
+export const RISK_EVENT_LABELS: Record<RiskEventType, string> = {
+  Realised: "Realised — the risk happened",
+  Released: "Released — value handed back",
+  Reduced: "Reduced — estimate revised down",
+};
 
 /* ---- Change lookups ------------------------------------------------------ */
 export const CHANGE_PRIORITIES: ChangePriority[] = ["Urgent", "High", "Standard", "Low"];

@@ -1,4 +1,4 @@
-import type { ChangeRequest, CostProfile, Risk } from "../types/domain";
+import type { ChangeRequest, CostProfile, Risk, RiskEvent, RiskEventType } from "../types/domain";
 import {
   addMonths,
   isMonthKey,
@@ -51,17 +51,25 @@ export interface TimelinePoint {
   label: string;
 }
 
-/** Contiguous month timeline spanning every profile, earliest start to latest
-    end. Months not covered by a given profile contribute 0. */
-export function buildTimeline(profiles: CostProfile[]): TimelinePoint[] {
-  const valid = profiles.filter((p) => isMonthKey(p.startMonth) && p.periods.length > 0);
-  if (valid.length === 0) return [];
-  let min = valid[0].startMonth;
-  let max = valid[0].startMonth;
-  for (const p of valid) {
-    const end = addMonths(p.startMonth, p.periods.length - 1);
-    if (monthDiff(min, p.startMonth) < 0) min = p.startMonth;
-    if (monthDiff(max, end) > 0) max = end;
+/** Contiguous month timeline spanning every profile (and any extra anchor
+    months, e.g. ledger event dates), earliest start to latest end. */
+export function buildTimeline(
+  profiles: CostProfile[],
+  extraMonths: MonthKey[] = [],
+): TimelinePoint[] {
+  const ranges: { start: MonthKey; end: MonthKey }[] = [];
+  for (const p of profiles) {
+    if (isMonthKey(p.startMonth) && p.periods.length > 0) {
+      ranges.push({ start: p.startMonth, end: addMonths(p.startMonth, p.periods.length - 1) });
+    }
+  }
+  for (const m of extraMonths) if (isMonthKey(m)) ranges.push({ start: m, end: m });
+  if (ranges.length === 0) return [];
+  let min = ranges[0].start;
+  let max = ranges[0].end;
+  for (const r of ranges) {
+    if (monthDiff(min, r.start) < 0) min = r.start;
+    if (monthDiff(max, r.end) > 0) max = r.end;
   }
   return monthRange(min, monthDiff(min, max) + 1).map((key) => ({
     key,
@@ -75,41 +83,79 @@ export function valueAt(profile: CostProfile, key: MonthKey): number {
   return idx >= 0 && idx < profile.periods.length ? (profile.periods[idx] ?? 0) : 0;
 }
 
-export interface DrawdownPoint {
-  m: string;
-  est: number;
-  rel: number;
-  real: number;
+/** The calendar month ("yyyy-mm") a ledger event falls in. */
+const eventMonth = (e: RiskEvent): MonthKey => e.date.slice(0, 7);
+
+/** Cumulative value of events of a given type that occurred on or before `key`. */
+function cumulativeTo(events: RiskEvent[], type: RiskEventType, key: MonthKey): number {
+  return events
+    .filter((e) => e.type === type && isMonthKey(eventMonth(e)) && monthDiff(eventMonth(e), key) >= 0)
+    .reduce((a, e) => a + e.amount, 0);
 }
 
-/** Portfolio drawdown across the shared timeline (in millions): estimated
-    exposure remaining vs cumulative released / realised. */
+export interface DrawdownPoint {
+  m: string;
+  /** Remaining open exposure: estimate less everything drawn down. */
+  exposure: number;
+  realised: number;
+  released: number;
+  reduced: number;
+}
+
+/** Portfolio drawdown across the shared timeline (in millions). Realised,
+    released and reduced lines step at the months the ledger events actually
+    occurred — never smeared — and exposure draws down accordingly. */
 export function drawdownSeries(risks: Risk[]): DrawdownPoint[] {
-  const timeline = buildTimeline(risks.map((r) => r.costProfile));
+  const events = risks.flatMap((r) => r.events);
+  const timeline = buildTimeline(
+    risks.map((r) => r.costProfile),
+    events.map(eventMonth),
+  );
   if (timeline.length === 0) return [];
   const totalEst = risks.reduce((a, r) => a + r.estimatedTotal, 0);
-  const totalRel = risks.reduce((a, r) => a + r.releasedTotal, 0);
-  const totalReal = risks.reduce((a, r) => a + r.realisedTotal, 0);
 
-  let cumEst = 0;
-  return timeline.map((t, i) => {
-    cumEst += risks.reduce((a, r) => a + valueAt(r.costProfile, t.key), 0);
-    const progress = (i + 1) / timeline.length;
+  return timeline.map((t) => {
+    const realised = cumulativeTo(events, "Realised", t.key);
+    const released = cumulativeTo(events, "Released", t.key);
+    const reduced = cumulativeTo(events, "Reduced", t.key);
     return {
       m: t.label,
-      est: Math.max(totalEst - cumEst, 0) / 1e6,
-      rel: (totalRel * progress) / 1e6,
-      real: (totalReal * progress) / 1e6,
+      exposure: Math.max(totalEst - realised - released - reduced, 0) / 1e6,
+      realised: realised / 1e6,
+      released: released / 1e6,
+      reduced: reduced / 1e6,
     };
   });
 }
 
-/** Single risk: estimated exposure remaining per month (in millions). */
-export function riskDrawdown(risk: Risk): { m: string; est: number }[] {
-  let remaining = risk.estimatedTotal;
-  return profileMonths(risk.costProfile).map((key, i) => {
-    remaining -= risk.costProfile.periods[i] ?? 0;
-    return { m: monthKeyLabel(key), est: Math.max(remaining, 0) / 1e6 };
+export interface RiskDrawdownPoint {
+  m: string;
+  /** Planned provision remaining per the cost profile (forecast reference). */
+  forecast: number;
+  /** Live open exposure: estimate less ledger draw-down. */
+  exposure: number;
+  realised: number;
+  released: number;
+}
+
+/** Single risk: forecast provision vs live exposure and cumulative ledger
+    draw-down, over the union of the profile and its event dates (in millions). */
+export function riskDrawdown(risk: Risk): RiskDrawdownPoint[] {
+  const timeline = buildTimeline([risk.costProfile], risk.events.map(eventMonth));
+  if (timeline.length === 0) return [];
+  let cumSpend = 0;
+  return timeline.map((t) => {
+    cumSpend += valueAt(risk.costProfile, t.key);
+    const realised = cumulativeTo(risk.events, "Realised", t.key);
+    const released = cumulativeTo(risk.events, "Released", t.key);
+    const reduced = cumulativeTo(risk.events, "Reduced", t.key);
+    return {
+      m: t.label,
+      forecast: Math.max(risk.estimatedTotal - cumSpend, 0) / 1e6,
+      exposure: Math.max(risk.estimatedTotal - realised - released - reduced, 0) / 1e6,
+      realised: realised / 1e6,
+      released: released / 1e6,
+    };
   });
 }
 

@@ -1,4 +1,4 @@
-import type { ChangePriority, ChangeStatus, RiskLevel, RiskStatus } from "../types/domain";
+import type { ChangePriority, ChangeStatus, RiskEventType, RiskLevel } from "../types/domain";
 
 /* ----------------------------------------------------------------------------
    Design tokens. Every colour points at a CSS custom property declared in
@@ -97,11 +97,16 @@ export const LEVEL_STYLES: Record<RiskLevel, { c: string; bg: string }> = {
   Low: { c: T.low, bg: T.lowBg },
 };
 
-export const RISK_STATUS_COLORS: Record<RiskStatus, string> = {
-  Open: T.critical,
-  Mitigating: T.high,
-  Monitoring: T.brand,
-  Closed: T.textSec,
+/** Statuses are client-configurable, so colour by the well-known states and
+    fall back to the brand colour for any custom "open" status. */
+export const riskStatusColor = (status: string): string =>
+  status === "Closed" ? T.textSec : T.brand;
+
+/** Draw-down ledger event styling. */
+export const RISK_EVENT_STYLES: Record<RiskEventType, { c: string; bg: string; label: string }> = {
+  Realised: { c: T.critical, bg: T.criticalBg, label: "Realised" },
+  Released: { c: T.low, bg: T.lowBg, label: "Released" },
+  Reduced: { c: T.brand, bg: T.brandBg, label: "Reduced" },
 };
 
 export const CHANGE_STATUS_STYLES: Record<ChangeStatus, { c: string; bg: string }> = {

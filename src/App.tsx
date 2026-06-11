@@ -1,8 +1,12 @@
 import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { AuthProvider, RequirePermission, useAuth } from "./auth/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/layout/Sidebar";
 import { ToastProvider } from "./components/Toast";
 import { Landing } from "./pages/Landing";
+import { RolesPage } from "./pages/admin/RolesPage";
+import { UsersPage } from "./pages/admin/UsersPage";
+import { SignInPage } from "./pages/auth/SignInPage";
 import { ChangeDashboard } from "./pages/dashboard/ChangeDashboard";
 import { RiskDashboard } from "./pages/dashboard/RiskDashboard";
 import { ChangeDetail } from "./pages/changes/ChangeDetail";
@@ -16,6 +20,7 @@ import { SettingsPage } from "./pages/settings/SettingsPage";
 import { AppDataProvider, useAppData } from "./store/AppData";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { T } from "./theme/tokens";
+import type { Permission } from "./types/auth";
 
 function Shell() {
   const { loading, error, refresh, config } = useAppData();
@@ -28,6 +33,11 @@ function Shell() {
       </ThemeProvider>
     );
   }
+
+  /** Permission-gated route element. */
+  const guarded = (permission: Permission, element: JSX.Element) => (
+    <RequirePermission permission={permission}>{element}</RequirePermission>
+  );
 
   return (
     <ThemeProvider branding={config.branding}>
@@ -48,18 +58,26 @@ function Shell() {
           <ErrorBoundary key={location.pathname}>
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<RiskDashboard />} />
-              <Route path="/risks" element={<RiskRegister />} />
-              <Route path="/risks/new" element={<AddRisk />} />
-              <Route path="/risks/:ref" element={<RiskDetail />} />
-              <Route path="/risks/:ref/edit" element={<EditRisk />} />
-              <Route path="/changes/dashboard" element={<ChangeDashboard />} />
-              <Route path="/changes" element={<ChangeRegister />} />
-              <Route path="/changes/new" element={<AddChange />} />
-              <Route path="/changes/:ref" element={<ChangeDetail />} />
-              <Route path="/changes/:ref/edit" element={<EditChange />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/dashboard" element={guarded("risks:read", <RiskDashboard />)} />
+              <Route path="/risks" element={guarded("risks:read", <RiskRegister />)} />
+              <Route path="/risks/new" element={guarded("risks:create", <AddRisk />)} />
+              <Route path="/risks/:ref" element={guarded("risks:read", <RiskDetail />)} />
+              <Route path="/risks/:ref/edit" element={guarded("risks:update", <EditRisk />)} />
+              <Route
+                path="/changes/dashboard"
+                element={guarded("changes:read", <ChangeDashboard />)}
+              />
+              <Route path="/changes" element={guarded("changes:read", <ChangeRegister />)} />
+              <Route path="/changes/new" element={guarded("changes:create", <AddChange />)} />
+              <Route path="/changes/:ref" element={guarded("changes:read", <ChangeDetail />)} />
+              <Route
+                path="/changes/:ref/edit"
+                element={guarded("changes:update", <EditChange />)}
+              />
+              <Route path="/reports" element={guarded("reports:read", <Reports />)} />
+              <Route path="/settings" element={guarded("settings:manage", <SettingsPage />)} />
+              <Route path="/admin/users" element={guarded("users:manage", <UsersPage />)} />
+              <Route path="/admin/roles" element={guarded("roles:manage", <RolesPage />)} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </ErrorBoundary>
@@ -70,15 +88,33 @@ function Shell() {
   );
 }
 
+/** Sign-in gate: data providers (and data fetching) only mount once a session
+    exists, and unmount again on sign-out so no cached data leaks across users. */
+function AuthGate() {
+  const { initializing, session } = useAuth();
+
+  if (initializing) {
+    return <Landing error={null} onRetry={() => window.location.reload()} />;
+  }
+  if (!session) {
+    return <SignInPage />;
+  }
+  return (
+    <AppDataProvider>
+      <HashRouter>
+        <Shell />
+      </HashRouter>
+    </AppDataProvider>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
-        <AppDataProvider>
-          <HashRouter>
-            <Shell />
-          </HashRouter>
-        </AppDataProvider>
+        <AuthProvider>
+          <AuthGate />
+        </AuthProvider>
       </ToastProvider>
     </ErrorBoundary>
   );
