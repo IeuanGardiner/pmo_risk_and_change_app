@@ -11,7 +11,7 @@ import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { LEVEL_STYLES, T } from "../../theme/tokens";
 import type { Rating, Risk, RiskLevel, Scope } from "../../types/domain";
-import { IMPACTS, LIKELIHOODS, RISK_STATUSES } from "../../types/lookups";
+import { IMPACTS, LIKELIHOODS } from "../../types/lookups";
 import { downloadCsv } from "../../utils/csv";
 import { formatDate, isOverdue } from "../../utils/format";
 
@@ -37,7 +37,7 @@ const parseRating = (v: string | null): Rating | null => {
 };
 
 export function RiskRegister() {
-  const { risks, activeProjects, restoreRisk } = useAppData();
+  const { risks, activeProjects, config, restoreRisk } = useAppData();
   const { can } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
@@ -105,14 +105,15 @@ export function RiskRegister() {
   const exportCsv = () =>
     downloadCsv(
       `risk-register-${scope.toLowerCase()}.csv`,
-      ["Reference", "Title", "Scope", "Category", "Workstream", "Level", "Score", "Likelihood", "Impact", "Owner", "Status", "Target Date", "Next Review", "Project", "Profile Start", "Profile Months", "Estimated", "Released", "Realised", "Archived"],
+      ["Reference", "Title", "Scope", "Category", "Workstream", "Level", "Score", "Likelihood", "Impact", "Owner", "Status", "Target Date", "Next Review", "Project", "Profile Start", "Profile Months", "Estimated", "Realised", "Released", "Reduced", "Open Exposure", "Archived"],
       sorted.map((r) => [
         r.riskReference, r.title, r.scope, r.category, r.workstream ?? "", r.level, r.score,
         LIKELIHOODS[r.likelihood], IMPACTS[r.impact], r.owner, r.status, r.targetDate ?? "",
         r.nextReviewDate ?? "",
         scope === "Project" ? projectName(r.projectId) : "",
         r.costProfile.startMonth, r.costProfile.periods.length,
-        r.estimatedTotal, r.releasedTotal, r.realisedTotal,
+        r.estimatedTotal, r.realisedTotal, r.releasedTotal, r.reducedTotal,
+        Math.max(r.estimatedTotal - r.realisedTotal - r.releasedTotal - r.reducedTotal, 0),
         r.archived ? "Yes" : "No",
       ]),
     );
@@ -281,7 +282,7 @@ export function RiskRegister() {
               <Select
                 value={status}
                 onChange={setStatus}
-                options={RISK_STATUSES}
+                options={config.riskStatuses}
                 placeholder="All statuses"
               />
             </div>

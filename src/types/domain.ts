@@ -8,7 +8,9 @@ export type Scope = "Project" | "Program";
 
 /* ---------------------------------- Risk --------------------------------- */
 
-export type RiskStatus = "Open" | "Mitigating" | "Monitoring" | "Closed";
+/** Free text so deployments can tailor the workflow in Settings. The literal
+    "Closed" is the one well-known state the close workflow depends on. */
+export type RiskStatus = string;
 export type RiskLevel = "Critical" | "High" | "Medium" | "Low";
 export type Rating = 1 | 2 | 3 | 4 | 5;
 
@@ -21,6 +23,41 @@ export interface CostProfile {
   startMonth: string;
   /** One entry per calendar month; length 1–60 (max 5 years). */
   periods: number[];
+}
+
+/* ---- Risk update ledger (the risk's change log) -------------------------- */
+
+/**
+ * A draw-down event against a risk:
+ *  - "Realised"  the risk happened — this is the cost it incurred and when.
+ *  - "Released"  it won't happen (in full or in part) — value handed back.
+ *  - "Reduced"   the estimate has been revised down while the risk stays open.
+ */
+export type RiskEventType = "Realised" | "Released" | "Reduced";
+
+export interface RiskEvent {
+  id: string;
+  type: RiskEventType;
+  /** Positive monetary value of this event. */
+  amount: number;
+  /** When the event happened / was actioned — ISO date (yyyy-mm-dd). */
+  date: string;
+  note: string;
+  actor: string;
+  /** ISO datetime the ledger entry was recorded. */
+  createdAt: string;
+  /** True when this event also closed the risk. */
+  closedRisk: boolean;
+}
+
+/** Payload for logging a new ledger event (server stamps id/actor/createdAt). */
+export interface RiskEventInput {
+  type: RiskEventType;
+  amount: number;
+  date: string;
+  note: string;
+  /** Close the risk as part of this event (e.g. full release / final realise). */
+  closeRisk: boolean;
 }
 
 export interface Risk {
@@ -43,10 +80,17 @@ export interface Risk {
   /** Next scheduled review, ISO date (yyyy-mm-dd) or null. */
   nextReviewDate: string | null;
   projectId: string | null;
+  /** The forecast risk value, spread by `costProfile`. */
   estimatedTotal: number;
-  releasedTotal: number;
+  /** Derived from the ledger (sum of "Realised" events). Server-computed. */
   realisedTotal: number;
+  /** Derived from the ledger (sum of "Released" events). Server-computed. */
+  releasedTotal: number;
+  /** Derived from the ledger (sum of "Reduced" events). Server-computed. */
+  reducedTotal: number;
   costProfile: CostProfile;
+  /** Update / draw-down ledger — appended via the risk event endpoint. */
+  events: RiskEvent[];
   mitigation: string;
   comments: string;
   linkedChangeRefs: string[];
@@ -58,10 +102,19 @@ export interface Risk {
   updatedAt: string;
 }
 
-/** Payload for create/update — derived + server-owned fields excluded. */
+/** Payload for create/update — derived, ledger + server-owned fields excluded. */
 export type RiskInput = Omit<
   Risk,
-  "riskReference" | "score" | "level" | "archived" | "createdAt" | "updatedAt"
+  | "riskReference"
+  | "score"
+  | "level"
+  | "realisedTotal"
+  | "releasedTotal"
+  | "reducedTotal"
+  | "events"
+  | "archived"
+  | "createdAt"
+  | "updatedAt"
 >;
 
 /* --------------------------------- Change -------------------------------- */

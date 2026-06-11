@@ -13,6 +13,7 @@ export function LookupListEditor({
   sub,
   values,
   usageCount,
+  systemValues = [],
   onChange,
 }: {
   title: string;
@@ -20,6 +21,8 @@ export function LookupListEditor({
   values: string[];
   /** How many records currently use a value (rename/delete blocked when > 0). */
   usageCount: (value: string) => number;
+  /** Values the workflow depends on — locked from rename/delete. */
+  systemValues?: string[];
   onChange: (next: string[]) => void;
 }) {
   const [newValue, setNewValue] = useState("");
@@ -72,7 +75,8 @@ export function LookupListEditor({
       <div style={{ display: "flex", flexDirection: "column" }}>
         {values.map((v) => {
           const uses = usageCount(v);
-          const locked = uses > 0;
+          const isSystem = systemValues.includes(v);
+          const locked = uses > 0 || isSystem;
           const isEditing = editing === v;
           return (
             <div
@@ -110,9 +114,9 @@ export function LookupListEditor({
               ) : (
                 <>
                   <span style={{ flex: 1, fontWeight: 600, color: T.text }}>{v}</span>
-                  {uses > 0 && (
+                  {isSystem ? (
                     <span
-                      title={`Used by ${uses} record${uses === 1 ? "" : "s"}`}
+                      title="Required by the workflow — cannot be removed"
                       style={{
                         fontSize: 11,
                         fontWeight: 600,
@@ -122,11 +126,33 @@ export function LookupListEditor({
                         padding: "2px 8px",
                       }}
                     >
-                      {uses} in use
+                      system
                     </span>
+                  ) : (
+                    uses > 0 && (
+                      <span
+                        title={`Used by ${uses} record${uses === 1 ? "" : "s"}`}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: T.textSec,
+                          background: T.bg,
+                          borderRadius: 10,
+                          padding: "2px 8px",
+                        }}
+                      >
+                        {uses} in use
+                      </span>
+                    )
                   )}
                   <IconBtn
-                    label={locked ? `Cannot rename — in use by ${uses} records` : `Rename ${v}`}
+                    label={
+                      isSystem
+                        ? "Cannot rename — required by the workflow"
+                        : locked
+                          ? `Cannot rename — in use by ${uses} records`
+                          : `Rename ${v}`
+                    }
                     disabled={locked}
                     onClick={() => {
                       setEditing(v);
@@ -136,7 +162,13 @@ export function LookupListEditor({
                     <Pencil size={14} />
                   </IconBtn>
                   <IconBtn
-                    label={locked ? `Cannot delete — in use by ${uses} records` : `Delete ${v}`}
+                    label={
+                      isSystem
+                        ? "Cannot delete — required by the workflow"
+                        : locked
+                          ? `Cannot delete — in use by ${uses} records`
+                          : `Delete ${v}`
+                    }
                     disabled={locked}
                     danger
                     onClick={() => remove(v)}

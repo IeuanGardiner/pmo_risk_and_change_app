@@ -11,7 +11,7 @@ import {
   CHANGE_STATUS_STYLES,
   LEVEL_STYLES,
   PRIORITY_COLORS,
-  RISK_STATUS_COLORS,
+  riskStatusColor,
   T,
 } from "../theme/tokens";
 import type { ChangePriority, ChangeStatus, RiskLevel, RiskStatus } from "../types/domain";
@@ -54,7 +54,7 @@ export const Pill = ({ level, small }: { level: RiskLevel; small?: boolean }) =>
 };
 
 export const RiskStatusText = ({ status }: { status: RiskStatus }) => (
-  <span style={{ color: RISK_STATUS_COLORS[status], fontWeight: 600, fontSize: 13 }}>{status}</span>
+  <span style={{ color: riskStatusColor(status), fontWeight: 600, fontSize: 13 }}>{status}</span>
 );
 
 export const ChangeStatusPill = ({ status, small }: { status: ChangeStatus; small?: boolean }) => {

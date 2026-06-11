@@ -14,13 +14,17 @@ export function Reports() {
 
   /* ---- Risk exposure by category ---- */
   const riskByCategory = useMemo(() => {
-    const m = new Map<string, { count: number; est: number; released: number; realised: number }>();
+    const m = new Map<
+      string,
+      { count: number; est: number; realised: number; released: number; reduced: number }
+    >();
     for (const r of activeRisks) {
-      const e = m.get(r.category) ?? { count: 0, est: 0, released: 0, realised: 0 };
+      const e = m.get(r.category) ?? { count: 0, est: 0, realised: 0, released: 0, reduced: 0 };
       e.count += 1;
       e.est += r.estimatedTotal;
-      e.released += r.releasedTotal;
       e.realised += r.realisedTotal;
+      e.released += r.releasedTotal;
+      e.reduced += r.reducedTotal;
       m.set(r.category, e);
     }
     return [...m.entries()].sort((a, b) => b[1].est - a[1].est);
@@ -58,8 +62,8 @@ export function Reports() {
   const exportRisks = () =>
     downloadCsv(
       "report-risk-exposure.csv",
-      ["Category", "Risks", "Estimated", "Released", "Realised"],
-      riskByCategory.map(([cat, v]) => [cat, v.count, v.est, v.released, v.realised]),
+      ["Category", "Risks", "Estimated", "Realised", "Released", "Reduced"],
+      riskByCategory.map(([cat, v]) => [cat, v.count, v.est, v.realised, v.released, v.reduced]),
     );
 
   const exportChanges = () =>
@@ -101,7 +105,7 @@ export function Reports() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {["Category", "Risks", "Estimated", "Released", "Realised"].map((h) => (
+                  {["Category", "Risks", "Estimated", "Realised", "Released", "Reduced"].map((h) => (
                     <th key={h} style={th}>{h}</th>
                   ))}
                 </tr>
@@ -111,9 +115,10 @@ export function Reports() {
                   <tr key={cat} style={{ borderTop: `1px solid ${T.strokeSubtle}` }}>
                     <td style={{ ...td, fontWeight: 600, color: T.text }}>{cat}</td>
                     <td style={td}>{v.count}</td>
-                    <td style={{ ...td, fontWeight: 600, color: T.critical }}>{money(v.est)}</td>
-                    <td style={td}>{money(v.released)}</td>
-                    <td style={td}>{money(v.realised)}</td>
+                    <td style={{ ...td, fontWeight: 600, color: T.text }}>{money(v.est)}</td>
+                    <td style={{ ...td, color: T.critical }}>{money(v.realised)}</td>
+                    <td style={{ ...td, color: T.low }}>{money(v.released)}</td>
+                    <td style={td}>{money(v.reduced)}</td>
                   </tr>
                 ))}
               </tbody>

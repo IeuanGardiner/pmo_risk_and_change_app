@@ -9,8 +9,8 @@ import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { LEVEL_STYLES, T } from "../../theme/tokens";
-import type { CostProfile, Rating, RiskInput, RiskStatus, Scope } from "../../types/domain";
-import { calcLevel, IMPACTS, LIKELIHOODS, RISK_STATUSES } from "../../types/lookups";
+import type { CostProfile, Rating, RiskInput, Scope } from "../../types/domain";
+import { calcLevel, IMPACTS, LIKELIHOODS, OPEN_STATUS } from "../../types/lookups";
 import { currentMonthKey, evenProfile } from "../../utils/calendar";
 import { currencySymbol, parseNum } from "../../utils/format";
 
@@ -23,15 +23,13 @@ interface FormState {
   owner: string;
   likelihood: string;
   impact: string;
-  status: RiskStatus;
+  status: string;
   targetDate: string;
   nextReviewDate: string;
   projectId: string;
   mitigation: string;
   comments: string;
   estimatedTotal: string;
-  releasedTotal: string;
-  realisedTotal: string;
   costProfile: CostProfile;
 }
 
@@ -44,15 +42,13 @@ const emptyForm = (defaultProjectId: string): FormState => ({
   owner: "",
   likelihood: "",
   impact: "",
-  status: "Open",
+  status: OPEN_STATUS,
   targetDate: "",
   nextReviewDate: "",
   projectId: defaultProjectId,
   mitigation: "",
   comments: "",
   estimatedTotal: "",
-  releasedTotal: "0",
-  realisedTotal: "0",
   costProfile: evenProfile(0, currentMonthKey(), 12),
 });
 
@@ -82,8 +78,6 @@ function toInput(f: FormState): RiskInput {
     nextReviewDate: f.nextReviewDate || null,
     projectId: isProject ? f.projectId || null : null,
     estimatedTotal: total,
-    releasedTotal: parseNum(f.releasedTotal),
-    realisedTotal: parseNum(f.realisedTotal),
     costProfile:
       f.costProfile.distribution === "Even"
         ? evenProfile(total, f.costProfile.startMonth, f.costProfile.periods.length)
@@ -98,13 +92,7 @@ function toInput(f: FormState): RiskInput {
 function validateValues(f: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
   const est = parseNum(f.estimatedTotal);
-  const released = parseNum(f.releasedTotal);
-  const realised = parseNum(f.realisedTotal);
   if (est <= 0) errors.estimatedTotal = "Enter a total risk value greater than zero";
-  if (released < 0) errors.releasedTotal = "Released value cannot be negative";
-  if (realised < 0) errors.realisedTotal = "Realised value cannot be negative";
-  if (released > est) errors.releasedTotal = "Released cannot exceed the estimated value";
-  if (realised > released) errors.realisedTotal = "Realised cannot exceed the released value";
   if (f.costProfile.distribution === "Custom") {
     const sum = f.costProfile.periods.reduce((a, v) => a + v, 0);
     if (Math.abs(sum - est) > 1) {
@@ -280,8 +268,8 @@ export function AddRisk() {
               <Field label="Status" required>
                 <Select
                   value={f.status}
-                  onChange={(v) => set("status", v as RiskStatus)}
-                  options={RISK_STATUSES}
+                  onChange={(v) => set("status", v)}
+                  options={config.riskStatuses}
                 />
               </Field>
               <Field label="Target Resolution Date">
@@ -425,8 +413,6 @@ export function EditRisk() {
           mitigation: risk.mitigation,
           comments: risk.comments,
           estimatedTotal: String(risk.estimatedTotal),
-          releasedTotal: String(risk.releasedTotal),
-          realisedTotal: String(risk.realisedTotal),
           costProfile: risk.costProfile,
         }
       : null,
@@ -559,8 +545,8 @@ export function EditRisk() {
           <Field label="Status" required>
             <Select
               value={f.status}
-              onChange={(v) => set("status", v as RiskStatus)}
-              options={RISK_STATUSES}
+              onChange={(v) => set("status", v)}
+              options={config.riskStatuses}
             />
           </Field>
           <Field label="Target Resolution Date">
@@ -583,7 +569,7 @@ export function EditRisk() {
 
         <Divider />
         <SubHead>Risk Value ({currencySymbol()})</SubHead>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+        <div style={{ maxWidth: 300 }}>
           <Field label="Estimated Risk Value" error={errors.estimatedTotal}>
             <Input
               type="number"
@@ -605,24 +591,10 @@ export function EditRisk() {
               }}
             />
           </Field>
-          <Field label="Released Risk" error={errors.releasedTotal}>
-            <Input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              value={f.releasedTotal}
-              onChange={(e) => set("releasedTotal", e.target.value)}
-            />
-          </Field>
-          <Field label="Realised Risk" error={errors.realisedTotal}>
-            <Input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              value={f.realisedTotal}
-              onChange={(e) => set("realisedTotal", e.target.value)}
-            />
-          </Field>
+        </div>
+        <div style={{ fontSize: 12, color: T.textSec, marginTop: 8, lineHeight: 1.5 }}>
+          Realised, released and reduced values are recorded against the risk over time using{" "}
+          <strong>Log Update</strong> on the risk detail page — they are no longer entered here.
         </div>
 
         <Divider />

@@ -7,6 +7,7 @@ import type {
   Project,
   ProjectInput,
   Risk,
+  RiskEventInput,
   RiskInput,
 } from "../types/domain";
 
@@ -23,6 +24,9 @@ export interface RiskService {
   get(ref: string): Promise<Risk | null>;
   create(input: RiskInput): Promise<Risk>;
   update(ref: string, patch: Partial<RiskInput>): Promise<Risk>;
+  /** Append a draw-down event (realised / released / reduced) to the ledger.
+      Recomputes derived totals and optionally closes the risk. */
+  addEvent(ref: string, event: RiskEventInput): Promise<Risk>;
   close(ref: string): Promise<Risk>;
   archive(ref: string): Promise<Risk>;
   restore(ref: string): Promise<Risk>;

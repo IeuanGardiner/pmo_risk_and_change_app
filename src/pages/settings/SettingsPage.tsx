@@ -6,9 +6,8 @@ import { useToast } from "../../components/Toast";
 import { isMockMode } from "../../api";
 import { useAppData } from "../../store/AppData";
 import { T } from "../../theme/tokens";
-import { CURRENCIES, type AppConfig } from "../../types/config";
+import { CURRENCIES, SYSTEM_RISK_STATUSES, type AppConfig } from "../../types/config";
 import { LookupListEditor } from "./LookupListEditor";
-import { MatrixEditor } from "./MatrixEditor";
 import { ProjectsManager } from "./ProjectsManager";
 
 export function SettingsPage() {
@@ -33,13 +32,14 @@ export function SettingsPage() {
       risks.filter((r) => r.scope === "Program" && r.category === v).length,
     workstream: (v: string) => risks.filter((r) => r.workstream === v).length,
     changeCategory: (v: string) => changes.filter((c) => c.category === v).length,
+    riskStatus: (v: string) => risks.filter((r) => r.status === v).length,
   };
 
   const save = async () => {
     setSaving(true);
     try {
       await updateConfig(draft);
-      toast.success("Configuration saved — risk levels recalculated");
+      toast.success("Configuration saved");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Saving configuration failed");
     } finally {
@@ -123,10 +123,14 @@ export function SettingsPage() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <Card style={{ padding: 18 }}>
-            <SectionTitle sub="Click any cell to cycle its band — saving recalculates every risk's level">
-              Scoring Model (5×5)
-            </SectionTitle>
-            <MatrixEditor grid={draft.matrix} onChange={(m) => setPart("matrix", m)} />
+            <LookupListEditor
+              title="Risk statuses"
+              sub="Workflow states a risk can hold — “Open” and “Closed” are required"
+              values={draft.riskStatuses}
+              usageCount={usage.riskStatus}
+              systemValues={SYSTEM_RISK_STATUSES}
+              onChange={(v) => setPart("riskStatuses", v)}
+            />
           </Card>
 
           <Card style={{ padding: 18 }}>
