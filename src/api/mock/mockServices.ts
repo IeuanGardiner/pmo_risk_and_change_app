@@ -8,6 +8,7 @@ import type {
   CostProfile,
   Project,
   ProjectInput,
+  Rating,
   Risk,
   RiskEvent,
   RiskEventInput,
@@ -92,6 +93,12 @@ const profileError = (p: CostProfile | undefined): string | null => {
 
 const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
+/** Target ratings are both-or-neither — reject a half-set pair. */
+const targetError = (tl: Rating | null, ti: Rating | null): string | null =>
+  (tl == null) !== (ti == null)
+    ? "Set both target likelihood and target impact, or leave both blank"
+    : null;
+
 /** Recompute the ledger-derived totals so they always agree with `events`. */
 const withTotals = (risk: Risk): Risk => {
   const sum = (type: RiskEvent["type"]) =>
@@ -117,7 +124,14 @@ export const TRANSITIONS: Record<ChangeTransitionAction, { from: ChangeStatus[];
 export function createMockServices(): Services {
   let config: AppConfig = loadStoredConfig();
   let risks: Risk[] = clone(SEED_RISKS).map((r) =>
-    withTotals({ ...r, level: calcLevel(config.matrix, r.likelihood, r.impact) }),
+    withTotals({
+      ...r,
+      level: calcLevel(config.matrix, r.likelihood, r.impact),
+      targetLevel:
+        r.targetLikelihood != null && r.targetImpact != null
+          ? calcLevel(config.matrix, r.targetLikelihood, r.targetImpact)
+          : null,
+    }),
   );
   let changes: ChangeRequest[] = clone(SEED_CHANGES);
   let projects: Project[] = clone(PROJECTS);
@@ -134,13 +148,22 @@ export function createMockServices(): Services {
     list: () => delay(clone(risks)),
     get: (ref) => delay(clone(risks.find((r) => r.riskReference === ref) ?? null)),
     create: (input: RiskInput) => {
-      const invalid = profileError(input.costProfile);
+      const invalid =
+        profileError(input.costProfile) ??
+        targetError(input.targetLikelihood, input.targetImpact);
       if (invalid) return Promise.reject(new Error(invalid));
+      const hasTarget = input.targetLikelihood != null && input.targetImpact != null;
       const rec: Risk = {
         ...input,
         riskReference: nextRef("R", risks.map((r) => r.riskReference)),
         score: calcScore(input.likelihood, input.impact),
         level: calcLevel(config.matrix, input.likelihood, input.impact),
+        targetScore: hasTarget
+          ? calcScore(input.targetLikelihood as Rating, input.targetImpact as Rating)
+          : null,
+        targetLevel: hasTarget
+          ? calcLevel(config.matrix, input.targetLikelihood as Rating, input.targetImpact as Rating)
+          : null,
         realisedTotal: 0,
         releasedTotal: 0,
         reducedTotal: 0,
@@ -155,8 +178,12 @@ export function createMockServices(): Services {
     update: (ref, patch) => {
       const existing = risks.find((r) => r.riskReference === ref);
       if (!existing) return Promise.reject(new Error(`Risk ${ref} not found`));
-      const invalid = profileError(patch.costProfile);
+      const tl =
+        patch.targetLikelihood !== undefined ? patch.targetLikelihood : existing.targetLikelihood;
+      const ti = patch.targetImpact !== undefined ? patch.targetImpact : existing.targetImpact;
+      const invalid = profileError(patch.costProfile) ?? targetError(tl, ti);
       if (invalid) return Promise.reject(new Error(invalid));
+      const hasTarget = tl != null && ti != null;
       const merged: Risk = {
         ...existing,
         ...patch,
@@ -166,6 +193,8 @@ export function createMockServices(): Services {
           patch.likelihood ?? existing.likelihood,
           patch.impact ?? existing.impact,
         ),
+        targetScore: hasTarget ? calcScore(tl, ti) : null,
+        targetLevel: hasTarget ? calcLevel(config.matrix, tl, ti) : null,
         updatedAt: nowIso(),
       };
       risks = risks.map((r) => (r.riskReference === ref ? merged : r));
@@ -364,6 +393,10 @@ export function createMockServices(): Services {
       risks = risks.map((r) => ({
         ...r,
         level: calcLevel(config.matrix, r.likelihood, r.impact),
+        targetLevel:
+          r.targetLikelihood != null && r.targetImpact != null
+            ? calcLevel(config.matrix, r.targetLikelihood, r.targetImpact)
+            : null,
       }));
       return delay(clone(config));
     },

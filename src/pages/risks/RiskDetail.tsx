@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Archive, ArchiveRestore, ArrowLeft, CheckCircle2, Pencil, Plus,
@@ -21,7 +21,7 @@ import { IMPACTS, isClosed, LIKELIHOODS } from "../../types/lookups";
 import { profileRangeLabel } from "../../utils/calendar";
 import { riskDrawdown } from "../../utils/chartData";
 import {
-  currencySymbol, formatDate, formatDateTime, isOverdue, money, moneyFull,
+  currencySymbol, formatDate, formatDateTime, isOverdue, money, moneyFull, scheduleDays,
 } from "../../utils/format";
 import { RiskUpdateDialog } from "./RiskUpdateDialog";
 
@@ -67,13 +67,34 @@ export function RiskDetail() {
     0,
   );
 
-  const detailRows: [string, string][] = [
+  const hasTarget = risk.targetLevel != null && risk.targetScore != null;
+
+  const detailRows: [string, ReactNode][] = [
     ["Category", risk.category],
     ["Workstream", risk.workstream ?? "—"],
     ["Scope", risk.scope],
     ["Likelihood", `${risk.likelihood} – ${LIKELIHOODS[risk.likelihood]}`],
     ["Impact", `${risk.impact} – ${IMPACTS[risk.impact]}`],
-    ["Risk Score", `${risk.score} / 25`],
+    [
+      "Risk Score",
+      hasTarget
+        ? `${risk.score} / 25 → target ${risk.targetScore} / 25`
+        : `${risk.score} / 25`,
+    ],
+    ...(hasTarget && risk.targetLevel
+      ? ([
+          [
+            "Target Level",
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+              <Pill level={risk.level} small />
+              <span style={{ color: T.textTer }}>→</span>
+              <Pill level={risk.targetLevel} small />
+            </span>,
+          ],
+        ] as [string, ReactNode][])
+      : []),
+    ["Proximity", risk.proximity ?? "—"],
+    ["Schedule Impact", scheduleDays(risk.scheduleImpactDays)],
     ["Status", risk.status],
     [
       "Project",
@@ -222,6 +243,12 @@ export function RiskDetail() {
       <Card style={{ padding: 16, borderLeft: `4px solid ${s.c}`, background: s.bg, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Pill level={risk.level} />
+          {hasTarget && risk.targetLevel && (
+            <>
+              <span style={{ color: T.textTer, fontSize: 13 }}>→</span>
+              <Pill level={risk.targetLevel} small />
+            </>
+          )}
           <span style={{ fontWeight: 700, color: s.c, fontSize: 15 }}>
             {risk.riskReference} – {risk.title}
           </span>

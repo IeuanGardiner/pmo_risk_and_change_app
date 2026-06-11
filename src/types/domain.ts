@@ -14,6 +14,14 @@ export type RiskStatus = string;
 export type RiskLevel = "Critical" | "High" | "Medium" | "Low";
 export type Rating = 1 | 2 | 3 | 4 | 5;
 
+/** How soon a risk could materialise (PMO "proximity"). */
+export type RiskProximity =
+  | "Imminent"
+  | "Within 3 months"
+  | "3-6 months"
+  | "6-12 months"
+  | "Beyond 12 months";
+
 export type DistributionMethod = "Even" | "Custom";
 
 /** Calendar-anchored cost spread: one entry per month from `startMonth`. */
@@ -74,6 +82,18 @@ export interface Risk {
   score: number;
   /** Derived from the configured 5×5 band matrix (server-computed in HTTP mode). */
   level: RiskLevel;
+  /** Post-mitigation (target/residual) likelihood — optional, both-or-neither. */
+  targetLikelihood: Rating | null;
+  /** Post-mitigation (target/residual) impact — optional, both-or-neither. */
+  targetImpact: Rating | null;
+  /** Derived: targetLikelihood × targetImpact when both set, else null. Server-owned. */
+  targetScore: number | null;
+  /** Derived from the matrix when both target ratings are set, else null. Server-owned. */
+  targetLevel: RiskLevel | null;
+  /** How soon the risk could materialise. */
+  proximity: RiskProximity | null;
+  /** Potential programme-time impact in days (default 0). */
+  scheduleImpactDays: number;
   status: RiskStatus;
   /** ISO date (yyyy-mm-dd) or null. */
   targetDate: string | null;
@@ -108,6 +128,8 @@ export type RiskInput = Omit<
   | "riskReference"
   | "score"
   | "level"
+  | "targetScore"
+  | "targetLevel"
   | "realisedTotal"
   | "releasedTotal"
   | "reducedTotal"

@@ -11,14 +11,27 @@ const RATINGS_DESC: Rating[] = [5, 4, 3, 2, 1];
 export function RiskMatrix({
   risks,
   grid,
+  view = "current",
   onPickCell,
 }: {
   risks: Risk[];
   grid: MatrixGrid;
+  /** "current" plots likelihood/impact; "target" plots the post-mitigation pair. */
+  view?: "current" | "target";
   onPickCell?: (likelihood: Rating, impact: Rating) => void;
 }) {
+  const isTarget = view === "target";
+  // Target view only plots risks that carry a post-mitigation assessment.
+  const plotted = isTarget
+    ? risks.filter((r) => r.targetLikelihood != null && r.targetImpact != null)
+    : risks;
+  const without = isTarget ? risks.length - plotted.length : 0;
   const countAt = (impact: Rating, likelihood: Rating) =>
-    risks.filter((r) => r.impact === impact && r.likelihood === likelihood).length;
+    plotted.filter((r) =>
+      isTarget
+        ? r.targetImpact === impact && r.targetLikelihood === likelihood
+        : r.impact === impact && r.likelihood === likelihood,
+    ).length;
 
   return (
     <div style={{ display: "flex", gap: 8 }}>
@@ -128,6 +141,11 @@ export function RiskMatrix({
             </div>
           ))}
         </div>
+        {without > 0 && (
+          <div style={{ textAlign: "center", fontSize: 11, color: T.textTer, marginTop: 8 }}>
+            {without} risk{without === 1 ? "" : "s"} without a target assessment
+          </div>
+        )}
       </div>
     </div>
   );

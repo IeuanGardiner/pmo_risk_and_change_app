@@ -6,6 +6,7 @@ import type {
   Risk,
   RiskEvent,
   RiskEventType,
+  RiskProximity,
   RiskStatus,
   Scope,
 } from "../../types/domain";
@@ -90,6 +91,11 @@ interface RiskSeed {
   owner: string;
   l: Rating;
   i: Rating;
+  /** Post-mitigation (target/residual) ratings — both or neither. */
+  tl?: Rating;
+  ti?: Rating;
+  proximity?: RiskProximity;
+  schedDays?: number;
   status: RiskStatus;
   target: string;
   review?: string;
@@ -112,6 +118,7 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R001", scope: "Project", title: "Scaffolding collapse at Level 4 east elevation",
     category: "Safety", workstream: "Civils & Structures", owner: "J. Hayes", l: 5, i: 5,
+    tl: 2, ti: 4, proximity: "Within 3 months", schedDays: 21,
     status: "Open", target: "2026-08-31", review: "2026-06-20",
     est: 4_200_000,
     events: [
@@ -127,6 +134,7 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R002", scope: "Project", title: "Ground subsidence Zone D",
     category: "Structural", workstream: "Civils & Structures", owner: "S. Patel", l: 4, i: 4,
+    tl: 2, ti: 3, proximity: "Imminent", schedDays: 45,
     status: "Open", target: "2026-05-15", review: "2026-05-15",
     est: 1_600_000,
     events: [
@@ -142,6 +150,7 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R003", scope: "Project", title: "Fire suppression non-compliant",
     category: "Safety", workstream: "Mechanical", owner: "J. Hayes", l: 3, i: 5,
+    tl: 1, ti: 4, proximity: "3-6 months",
     status: "Open", target: "2026-09-20", review: "2026-07-01",
     est: 800_000,
     events: [
@@ -180,6 +189,7 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R006", scope: "Project", title: "Steel delivery delayed",
     category: "Supply", workstream: "Civils & Structures", owner: "M. Clarke", l: 5, i: 4,
+    tl: 2, ti: 3, proximity: "Imminent", schedDays: 30,
     status: "Open", target: "2026-02-28", review: "2026-06-01",
     est: 1_100_000,
     events: [
@@ -208,6 +218,7 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R008", scope: "Project", title: "Subcontractor insolvency – MEP",
     category: "Commercial", workstream: "Commercial", owner: "P. Evans", l: 2, i: 4,
+    tl: 1, ti: 3, proximity: "6-12 months",
     status: "Open", target: "2026-09-30", review: "2026-08-15",
     est: 700_000,
     desc: "MEP subcontractor showing financial distress signals.",
@@ -248,6 +259,7 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R011", scope: "Program", title: "Fuel & energy price volatility",
     category: "Supply Chain", workstream: null, owner: "I. Gardiner", l: 4, i: 4,
+    tl: 3, ti: 3, proximity: "Beyond 12 months", schedDays: 60,
     status: "Open", target: "2027-03-31", review: "2026-05-30",
     est: 3_500_000,
     desc: "Sustained energy price increases across the capital programme.",
@@ -258,6 +270,7 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R012", scope: "Program", title: "Construction cost inflation",
     category: "Economic", workstream: null, owner: "I. Gardiner", l: 5, i: 3,
+    tl: 3, ti: 2, proximity: "Beyond 12 months", schedDays: 90,
     status: "Open", target: "2030-03-31", review: "2026-09-30",
     est: 6_800_000,
     events: [
@@ -272,6 +285,7 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R013", scope: "Program", title: "Building-safety regulation changes",
     category: "Regulatory", workstream: null, owner: "I. Gardiner", l: 3, i: 5,
+    tl: 2, ti: 4, proximity: "6-12 months",
     status: "Open", target: "2028-03-31", review: "2026-08-31",
     est: 2_000_000,
     events: [
@@ -323,6 +337,13 @@ export const SEED_RISKS: Risk[] = riskSeed.map((s) => {
     impact: s.i,
     score: calcScore(s.l, s.i),
     level: calcLevel(DEFAULT_CONFIG.matrix, s.l, s.i),
+    targetLikelihood: s.tl ?? null,
+    targetImpact: s.ti ?? null,
+    targetScore: s.tl != null && s.ti != null ? calcScore(s.tl, s.ti) : null,
+    targetLevel:
+      s.tl != null && s.ti != null ? calcLevel(DEFAULT_CONFIG.matrix, s.tl, s.ti) : null,
+    proximity: s.proximity ?? null,
+    scheduleImpactDays: s.schedDays ?? 0,
     status: s.status,
     targetDate: s.target,
     nextReviewDate: s.review ?? null,

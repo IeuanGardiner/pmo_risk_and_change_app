@@ -9,9 +9,14 @@ environment variable.
 ## Features
 
 **Risk module**
-- Risk dashboard — KPI cards, interactive 5×5 risk matrix (cell counts link to a
-  filtered register), "Attention Needed" panel for overdue reviews/targets,
-  top-priority risks, category distribution, portfolio drawdown chart
+- Risk dashboard — KPI cards, interactive 5×5 risk matrix with a **Current /
+  Target** toggle (cell counts link to a filtered register), "Attention Needed"
+  panel for overdue reviews/targets, top-priority risks, category distribution,
+  portfolio drawdown chart
+- **Current vs target scoring** — capture the post-mitigation (residual)
+  likelihood/impact so boards see the reduction trajectory (e.g. 20 → 6), plus a
+  **proximity** rating (how soon the risk could materialise) and a **schedule
+  impact** in days. Target score/level are derived from the configured matrix
 - Risk register — Project/Programme scope toggle, level tabs, status & project
   filters, sortable columns, pagination, archived-record toggle, CSV export
 - 2-step "Log Risk" wizard with a calendar-anchored cost profile: choose a start
@@ -124,7 +129,7 @@ All payload shapes are the TypeScript interfaces in `src/types/domain.ts` and
 | --- | --- | --- | --- |
 | GET | `/api/risks` | — | `Risk[]` (including archived) |
 | GET | `/api/risks/:ref` | — | `Risk` |
-| POST | `/api/risks` | `RiskInput` | `Risk` (server assigns reference, score, level, timestamps) |
+| POST | `/api/risks` | `RiskInput` | `Risk` (server assigns reference, score, level, target score/level, timestamps) |
 | PATCH | `/api/risks/:ref` | `Partial<RiskInput>` | `Risk` |
 | POST | `/api/risks/:ref/events` | `RiskEventInput` | `Risk` (appends a ledger event, recomputes derived totals, optionally closes) |
 | POST | `/api/risks/:ref/close` | — | `Risk` |
@@ -175,6 +180,12 @@ in `src/api/mock/mockServices.ts`):
 
 - `score = likelihood × impact`; `level` from the 5×5 band matrix
   (`AppConfig.matrix`, `grid[impact][likelihood]`)
+- Post-mitigation (target/residual) scoring: `RiskInput` carries optional
+  `targetLikelihood`/`targetImpact` (plus `proximity` and `scheduleImpactDays`).
+  `targetScore`/`targetLevel` are **derived** the same way as score/level when
+  **both** target ratings are set, else `null`. The pair is both-or-neither —
+  reject a payload that sets only one. A matrix change on `PUT /api/config`
+  re-bands **both** `level` and `targetLevel` for every stored risk
 - A risk's `realisedTotal`, `releasedTotal` and `reducedTotal` are **derived**
   from its `events` ledger (sum by type). `POST /api/risks/:ref/events` appends
   an entry, recomputes these totals, and sets `status = "Closed"` when the event

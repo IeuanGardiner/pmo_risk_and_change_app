@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Plus } from "lucide-react";
 import {
@@ -25,6 +25,7 @@ export function RiskDashboard() {
   usePageTitle("Risk Dashboard");
 
   const open = useMemo(() => activeRisks.filter((r) => r.status !== "Closed"), [activeRisks]);
+  const [matrixView, setMatrixView] = useState<"current" | "target">("current");
   const lastUpdated = activeRisks.reduce((a, r) => (r.updatedAt > a ? r.updatedAt : a), "");
 
   const kpis = useMemo(() => {
@@ -138,12 +139,46 @@ export function RiskDashboard() {
         }}
       >
         <Card style={{ padding: 18 }}>
-          <SectionTitle sub="Click a count to open those risks in the register">
-            Risk Matrix
-          </SectionTitle>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 8,
+            }}
+          >
+            <SectionTitle sub="Click a count to open those risks in the register">
+              Risk Matrix
+            </SectionTitle>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["current", "target"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setMatrixView(v)}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    fontFamily: T.font,
+                    cursor: "pointer",
+                    background: matrixView === v ? T.sidebar : T.surface,
+                    color: matrixView === v ? "#fff" : T.textSec,
+                    border: `1px solid ${matrixView === v ? T.sidebar : T.stroke}`,
+                  }}
+                >
+                  {v === "current" ? "Current" : "Target"}
+                </button>
+              ))}
+            </div>
+          </div>
           <RiskMatrix
             risks={open}
             grid={config.matrix}
+            view={matrixView}
+            // In target view the cell still routes by l/i params, which the register
+            // reads as current likelihood/impact — an accepted approximation (the
+            // register has no target-cell filter), so some rows may not match exactly.
             onPickCell={(l, i) => navigate(`/risks?l=${l}&i=${i}`)}
           />
         </Card>

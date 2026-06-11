@@ -1,4 +1,11 @@
-import type { ChangePriority, ChangeStatus, Rating, RiskEventType, RiskLevel } from "./domain";
+import type {
+  ChangePriority,
+  ChangeStatus,
+  Rating,
+  RiskEventType,
+  RiskLevel,
+  RiskProximity,
+} from "./domain";
 import type { MatrixGrid } from "./config";
 
 /* ---- Likelihood / impact scales ---------------------------------------- */
@@ -26,6 +33,15 @@ export const calcLevel = (grid: MatrixGrid, likelihood: Rating, impact: Rating):
   grid[impact]?.[likelihood] ?? "Low";
 
 export const RISK_LEVELS: RiskLevel[] = ["Critical", "High", "Medium", "Low"];
+
+/** Proximity scale — how soon the risk could materialise (soonest first). */
+export const RISK_PROXIMITIES: RiskProximity[] = [
+  "Imminent",
+  "Within 3 months",
+  "3-6 months",
+  "6-12 months",
+  "Beyond 12 months",
+];
 
 /* ---- Risk workflow ------------------------------------------------------- */
 /** The status the close workflow drives risks into. */
