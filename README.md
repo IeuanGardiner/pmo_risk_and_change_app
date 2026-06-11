@@ -52,6 +52,15 @@ environment variable.
 - In mock mode all configuration persists to localStorage; in live mode it is
   saved via `PUT /api/config`
 
+**Users & access (RBAC)**
+- Sign-in with per-user accounts — the data layer only loads after authentication
+- Six built-in roles (Admin, Risk Manager, Change Manager, Risk Editor, Change
+  Editor, Read Only) built on a fine-grained `resource:action` permission catalogue
+- Admin area: invite / suspend / remove users, assign multiple roles, and create
+  custom roles with a permission-matrix editor (least-privilege defaults)
+- Navigation, routes and action buttons all respect the signed-in user's
+  permissions; Settings, Users and Roles are admin-only
+
 **Production polish**
 - Global search (sidebar) across risks and changes with keyboard navigation
 - Toast notifications for every mutation, success and failure
@@ -151,11 +160,91 @@ in `src/api/mock/mockServices.ts`):
 - `archived` flags are server-owned — set only via the archive/restore endpoints
 - Validate cost profiles: `startMonth` is `yyyy-mm`, `1 ≤ periods.length ≤ 60`
 
+## Users, roles & permissions
+
+Sign-in is required. Access is controlled with role-based access control built
+on fine-grained permissions:
+
+- **Permissions** are `resource:action` grants (`risks:create`, `changes:approve`,
+  `settings:manage`, …) — the full catalogue is `PERMISSIONS` in `src/types/auth.ts`.
+  Feature code only ever checks permissions, never role names, so new roles work
+  without code changes.
+- **Roles** bundle permissions. Six system roles ship built-in (below); admins
+  can add custom roles in **Administration → Roles & Permissions**. New roles
+  start with zero permissions (least privilege) and any role can be duplicated
+  as a starting point. System roles are immutable; custom roles in use cannot
+  be deleted.
+- **Users** hold one or more roles; their effective permissions are the union.
+  Admins manage accounts in **Administration → Users** (invite, edit roles,
+  suspend/reactivate, remove).
+
+| Role | Risks | Changes | Reports | Administration |
+| --- | --- | --- | --- | --- |
+| Admin | full | full | view | settings, projects, users, roles |
+| Risk Manager | log, edit, close, archive/restore | view | view | — |
+| Change Manager | view | raise, edit, progress, approve/reject, delete drafts | view | — |
+| Risk Editor | log, edit | view | view | — |
+| Change Editor | view | raise, edit, progress workflow | view | — |
+| Read Only | view | view | view | — |
+
+The change workflow distinguishes routine moves (`changes:transition`: submit,
+start review, mark implemented, reopen) from approval decisions
+(`changes:approve`), so editors can progress work without holding decision
+authority.
+
+In mock mode users, custom roles and the session persist to localStorage, and
+every demo account (one per role, listed on the sign-in page) signs in with the
+password `demo1234`.
+
+### Auth & admin REST contract
+
+Payload shapes are the interfaces in `src/types/auth.ts`. In HTTP mode the
+client stores the token returned by login and sends it as
+`Authorization: Bearer <token>` on every API request.
+
+| Method | Path | Body | Returns |
+| --- | --- | --- | --- |
+| POST | `/api/auth/login` | `{ email, password }` | `Session` (includes `token`) |
+| GET | `/api/auth/session` | — | `Session` (401 when invalid/expired) |
+| POST | `/api/auth/logout` | — | 204 |
+| GET | `/api/users` | — | `User[]` |
+| POST | `/api/users` | `UserInput` | `User` (created as `Invited`) |
+| PATCH | `/api/users/:id` | `Partial<UserInput>` | `User` |
+| POST | `/api/users/:id/suspend` | — | `User` |
+| POST | `/api/users/:id/reactivate` | — | `User` |
+| DELETE | `/api/users/:id` | — | 204 |
+| GET | `/api/roles` | — | `Role[]` |
+| POST | `/api/roles` | `RoleInput` | `Role` |
+| PATCH | `/api/roles/:id` | `Partial<RoleInput>` | `Role` |
+| DELETE | `/api/roles/:id` | — | 204 |
+
+**The backend must enforce every permission server-side** — the client checks
+them only to shape the UI. Server-owned rules (the mock layer in
+`src/api/mock/mockAuth.ts` shows the expected behaviour):
+
+- Effective permissions = union of the user's roles, computed server-side and
+  returned on the `Session`
+- Credentials checked at login; suspended users cannot sign in; an `Invited`
+  user becomes `Active` on first sign-in (and `lastActiveAt` is stamped)
+- User/role admin endpoints require `users:manage` / `roles:manage`
+- Emails are unique; users must hold ≥ 1 role; roles must grant ≥ 1 permission
+- The last active user holding `users:manage` can never be suspended, removed
+  or demoted; users cannot suspend or remove their own account
+- System roles are immutable and undeletable; custom roles assigned to users
+  cannot be deleted
+- Domain endpoints enforce their permission too — e.g. `POST /api/risks` needs
+  `risks:create`, archive/restore need `risks:archive`, and each change
+  transition maps to a permission via `CHANGE_TRANSITION_PERMISSIONS`
+
+`GET /api/me` (`AppUser`) is retained for compatibility, but
+`GET /api/auth/session` is the authoritative source for the signed-in user.
+
 ## Project structure
 
 ```
 src/
-  api/            service interfaces + mock & http implementations
+  api/            service interfaces + mock & http implementations (incl. auth)
+  auth/           AuthContext — session state, can() permission checks, route guard
   components/     shared UI primitives, sidebar, search, matrix, period editor,
                   toasts, dialogs, error boundary
   hooks/          table sorting/pagination, page titles

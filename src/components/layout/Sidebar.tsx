@@ -3,48 +3,76 @@ import {
   FileBarChart,
   GitPullRequestArrow,
   LayoutDashboard,
+  LogOut,
   PlusCircle,
   Repeat,
   Settings,
+  ShieldCheck,
+  Users,
+  type LucideIcon,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../../auth/AuthContext";
 import { T } from "../../theme/tokens";
 import { useAppData } from "../../store/AppData";
+import type { Permission } from "../../types/auth";
 import { GlobalSearch } from "../GlobalSearch";
 
-const NAV_SECTIONS = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end: boolean;
+  /** Hidden unless the signed-in user holds this permission. */
+  permission: Permission;
+}
+
+const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   {
     label: "Overview",
     items: [
-      { to: "/dashboard", label: "Risk Dashboard", icon: LayoutDashboard, end: true },
-      { to: "/changes/dashboard", label: "Change Dashboard", icon: Repeat, end: true },
+      { to: "/dashboard", label: "Risk Dashboard", icon: LayoutDashboard, end: true, permission: "risks:read" },
+      { to: "/changes/dashboard", label: "Change Dashboard", icon: Repeat, end: true, permission: "changes:read" },
     ],
   },
   {
     label: "Risk",
     items: [
-      { to: "/risks", label: "Risk Register", icon: ClipboardList, end: true },
-      { to: "/risks/new", label: "Add Risk", icon: PlusCircle, end: true },
+      { to: "/risks", label: "Risk Register", icon: ClipboardList, end: true, permission: "risks:read" },
+      { to: "/risks/new", label: "Add Risk", icon: PlusCircle, end: true, permission: "risks:create" },
     ],
   },
   {
     label: "Change",
     items: [
-      { to: "/changes", label: "Change Register", icon: GitPullRequestArrow, end: true },
-      { to: "/changes/new", label: "Raise Change", icon: PlusCircle, end: true },
+      { to: "/changes", label: "Change Register", icon: GitPullRequestArrow, end: true, permission: "changes:read" },
+      { to: "/changes/new", label: "Raise Change", icon: PlusCircle, end: true, permission: "changes:create" },
     ],
   },
   {
     label: "General",
     items: [
-      { to: "/reports", label: "Reports", icon: FileBarChart, end: false },
-      { to: "/settings", label: "Settings", icon: Settings, end: false },
+      { to: "/reports", label: "Reports", icon: FileBarChart, end: false, permission: "reports:read" },
+      { to: "/settings", label: "Settings", icon: Settings, end: false, permission: "settings:manage" },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { to: "/admin/users", label: "Users", icon: Users, end: true, permission: "users:manage" },
+      { to: "/admin/roles", label: "Roles & Permissions", icon: ShieldCheck, end: true, permission: "roles:manage" },
     ],
   },
 ];
 
 export function Sidebar() {
-  const { user, activeProjects, activeRisks, changes } = useAppData();
+  const { activeProjects, activeRisks, changes } = useAppData();
+  const { session, user, can, signOut } = useAuth();
+
+  const sections = NAV_SECTIONS.map((s) => ({
+    ...s,
+    items: s.items.filter((item) => can(item.permission)),
+  })).filter((s) => s.items.length > 0);
 
   return (
     <div
@@ -95,7 +123,7 @@ export function Sidebar() {
       <GlobalSearch />
 
       <div style={{ padding: "0 10px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
-        {NAV_SECTIONS.map((section) => (
+        {sections.map((section) => (
           <div key={section.label}>
             <div
               style={{
@@ -183,10 +211,41 @@ export function Sidebar() {
         >
           {user?.initials ?? "·"}
         </div>
-        <div>
-          <div style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{user?.name ?? "—"}</div>
-          <div style={{ fontSize: 11, color: T.textTer }}>{user?.role ?? ""}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 600,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {user?.name ?? "—"}
+          </div>
+          <div style={{ fontSize: 11, color: T.textTer }}>
+            {session?.roles.map((r) => r.name).join(", ") ?? ""}
+          </div>
         </div>
+        <button
+          onClick={() => void signOut()}
+          title="Sign out"
+          aria-label="Sign out"
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: T.sidebarText,
+            padding: 6,
+            borderRadius: 6,
+            display: "grid",
+            placeItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          <LogOut size={16} />
+        </button>
       </div>
     </div>
   );
