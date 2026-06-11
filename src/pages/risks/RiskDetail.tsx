@@ -4,6 +4,7 @@ import { Archive, ArchiveRestore, ArrowLeft, CheckCircle2, Pencil } from "lucide
 import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { useAuth } from "../../auth/AuthContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import {
   Btn, Card, ChangeStatusPill, EmptyState, PageHeader, Pill, SectionTitle,
@@ -23,6 +24,7 @@ export function RiskDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
   const { risks, changes, projects, closeRisk, archiveRisk, restoreRisk } = useAppData();
+  const { can } = useAuth();
   const toast = useToast();
   const [closing, setClosing] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -123,22 +125,28 @@ export function RiskDetail() {
               Back
             </Btn>
             {risk.archived ? (
-              <Btn variant="dark" icon={ArchiveRestore} onClick={() => void onRestore()} loading={archiving}>
-                Restore
-              </Btn>
+              can("risks:archive") && (
+                <Btn variant="dark" icon={ArchiveRestore} onClick={() => void onRestore()} loading={archiving}>
+                  Restore
+                </Btn>
+              )
             ) : (
               <>
-                <Btn
-                  variant="default"
-                  icon={Pencil}
-                  onClick={() => navigate(`/risks/${risk.riskReference}/edit`)}
-                >
-                  Edit
-                </Btn>
-                <Btn variant="default" icon={Archive} onClick={() => setConfirmArchive(true)}>
-                  Archive
-                </Btn>
-                {risk.status !== "Closed" && (
+                {can("risks:update") && (
+                  <Btn
+                    variant="default"
+                    icon={Pencil}
+                    onClick={() => navigate(`/risks/${risk.riskReference}/edit`)}
+                  >
+                    Edit
+                  </Btn>
+                )}
+                {can("risks:archive") && (
+                  <Btn variant="default" icon={Archive} onClick={() => setConfirmArchive(true)}>
+                    Archive
+                  </Btn>
+                )}
+                {risk.status !== "Closed" && can("risks:close") && (
                   <Btn variant="dark" icon={CheckCircle2} onClick={() => void onClose()} loading={closing}>
                     Close Risk
                   </Btn>

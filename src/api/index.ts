@@ -9,8 +9,11 @@ import type { Services } from "./services";
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
 
-export const services: Services = baseUrl
-  ? createHttpServices(baseUrl.replace(/\/$/, ""))
+/** Normalised API root, or null in mock mode. Also used by ./auth.ts. */
+export const apiBaseUrl = baseUrl ? baseUrl.replace(/\/$/, "") : null;
+
+export const services: Services = apiBaseUrl
+  ? createHttpServices(apiBaseUrl)
   : createMockServices();
 
-export const isMockMode = !baseUrl;
+export const isMockMode = !apiBaseUrl;

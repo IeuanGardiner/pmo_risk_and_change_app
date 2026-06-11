@@ -4,6 +4,7 @@ import { ArrowRight, Download, Plus, X } from "lucide-react";
 import {
   Btn, Card, EmptyState, PageHeader, Pagination, Pill, RiskStatusText, Select, SortableTh,
 } from "../../components/ui";
+import { useAuth } from "../../auth/AuthContext";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useSortPage, type SortState } from "../../hooks/useSortPage";
 import { useToast } from "../../components/Toast";
@@ -37,6 +38,7 @@ const parseRating = (v: string | null): Rating | null => {
 
 export function RiskRegister() {
   const { risks, activeProjects, restoreRisk } = useAppData();
+  const { can } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
   usePageTitle("Risk Register");
@@ -154,9 +156,11 @@ export function RiskRegister() {
             <Btn variant="default" icon={Download} onClick={exportCsv}>
               Export
             </Btn>
-            <Btn variant="dark" icon={Plus} onClick={() => navigate("/risks/new")}>
-              Add Risk
-            </Btn>
+            {can("risks:create") && (
+              <Btn variant="dark" icon={Plus} onClick={() => navigate("/risks/new")}>
+                Add Risk
+              </Btn>
+            )}
           </div>
         }
       />
@@ -377,14 +381,16 @@ export function RiskRegister() {
                   onClick={(e) => r.archived && e.stopPropagation()}
                 >
                   {r.archived ? (
-                    <Btn
-                      variant="subtle"
-                      loading={restoring === r.riskReference}
-                      onClick={() => void onRestore(r.riskReference)}
-                      style={{ padding: "4px 10px", fontSize: 12 }}
-                    >
-                      Restore
-                    </Btn>
+                    can("risks:archive") && (
+                      <Btn
+                        variant="subtle"
+                        loading={restoring === r.riskReference}
+                        onClick={() => void onRestore(r.riskReference)}
+                        style={{ padding: "4px 10px", fontSize: 12 }}
+                      >
+                        Restore
+                      </Btn>
+                    )
                   ) : (
                     <ArrowRight size={16} />
                   )}

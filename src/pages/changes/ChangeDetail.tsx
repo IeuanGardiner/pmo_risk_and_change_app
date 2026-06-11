@@ -4,6 +4,7 @@ import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import {
   Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { useAuth } from "../../auth/AuthContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import {
   Btn, Card, ChangeStatusPill, EmptyState, Input, PageHeader, Pill, PriorityText, SectionTitle,
@@ -12,6 +13,7 @@ import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { CHANGE_STATUS_STYLES, T } from "../../theme/tokens";
+import { CHANGE_TRANSITION_PERMISSIONS } from "../../types/auth";
 import type { ChangeTransitionAction } from "../../types/domain";
 import { profileRangeLabel } from "../../utils/calendar";
 import { profileSeries } from "../../utils/chartData";
@@ -38,6 +40,7 @@ export function ChangeDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
   const { changes, risks, projects, transitionChange, deleteChange } = useAppData();
+  const { can } = useAuth();
   const toast = useToast();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -69,7 +72,10 @@ export function ChangeDetail() {
   const s = CHANGE_STATUS_STYLES[change.status];
   const linkedRisks = risks.filter((r) => change.linkedRiskRefs.includes(r.riskReference));
   const project = projects.find((p) => p.id === change.projectId);
-  const actions = ACTIONS_BY_STATUS[change.status] ?? [];
+  // Only offer the workflow moves this user may make (the server re-checks).
+  const actions = (ACTIONS_BY_STATUS[change.status] ?? []).filter((a) =>
+    can(CHANGE_TRANSITION_PERMISSIONS[a.action]),
+  );
 
   const run = async (action: ChangeTransitionAction) => {
     setBusy(true);
@@ -130,14 +136,16 @@ export function ChangeDetail() {
             <Btn variant="default" icon={ArrowLeft} onClick={() => navigate("/changes")}>
               Back
             </Btn>
-            <Btn
-              variant="default"
-              icon={Pencil}
-              onClick={() => navigate(`/changes/${change.changeReference}/edit`)}
-            >
-              Edit
-            </Btn>
-            {change.status === "Draft" && (
+            {can("changes:update") && (
+              <Btn
+                variant="default"
+                icon={Pencil}
+                onClick={() => navigate(`/changes/${change.changeReference}/edit`)}
+              >
+                Edit
+              </Btn>
+            )}
+            {change.status === "Draft" && can("changes:delete") && (
               <Btn variant="danger" icon={Trash2} onClick={() => setConfirmDelete(true)}>
                 Delete Draft
               </Btn>
