@@ -6,6 +6,7 @@ import type {
   ChangeStatus,
   ChangeTransitionAction,
   CostProfile,
+  Issue,
   Project,
   ProjectInput,
   Rating,
@@ -29,6 +30,7 @@ import { isMonthKey, MAX_PROFILE_MONTHS } from "../../utils/calendar";
 import type {
   ChangeService,
   ConfigService,
+  IssueService,
   ProjectService,
   ReferenceService,
   RiskService,
@@ -571,11 +573,23 @@ export function createMockServices(): Services {
     currentUser: () => delay(clone(CURRENT_USER)),
   };
 
+  // Stub — replaced by the full implementation in Task 5 (mockServices.ts A5).
+  let issueStore: Issue[] = [];
+  const issueService: IssueService = {
+    list: () => delay(clone(issueStore)),
+    get: (ref) => delay(clone(issueStore.find((i) => i.issueReference === ref) ?? null)),
+    create: () => Promise.reject(new Error("Issue service not yet initialised")),
+    update: () => Promise.reject(new Error("Issue service not yet initialised")),
+    archive: () => Promise.reject(new Error("Issue service not yet initialised")),
+    restore: () => Promise.reject(new Error("Issue service not yet initialised")),
+  };
+
   return {
     risks: riskService,
     changes: changeService,
     projects: projectService,
     config: configService,
     reference: referenceService,
+    issues: issueService,
   };
 }
