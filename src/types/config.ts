@@ -41,11 +41,15 @@ export interface AppConfig {
   projectRiskCategories: string[];
   programRiskCategories: string[];
   changeCategories: string[];
+  /** What a change can impact (scope, quality, H&S…) — offered as chips. */
+  changeImpactAreas: string[];
   workstreams: string[];
   /** Project type lookup, offered when maintaining projects. */
   projectTypes: string[];
   /** Risk workflow statuses. "Open" and "Closed" are always present. */
   riskStatuses: string[];
+  /** Days used to pre-fill the next review date when a risk review is logged. */
+  reviewCadenceDays: number;
   matrix: MatrixGrid;
   currency: CurrencyConfig;
   branding: BrandingConfig;
@@ -122,6 +126,16 @@ export const DEFAULT_CONFIG: AppConfig = {
     "Political",
   ],
   changeCategories: ["Scope", "Design", "Schedule", "Cost", "Regulatory", "Process"],
+  changeImpactAreas: [
+    "Scope",
+    "Schedule",
+    "Cost",
+    "Quality",
+    "Health & Safety",
+    "Environment",
+    "Commercial / Contract",
+    "Design",
+  ],
   projectTypes: ["Infrastructure", "Buildings", "Highways", "Rail", "Water", "Energy", "Other"],
   workstreams: [
     "Civils & Structures",
@@ -133,6 +147,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     "Consents & Environment",
   ],
   riskStatuses: ["Open", "Closed"],
+  reviewCadenceDays: 30,
   matrix: DEFAULT_MATRIX,
   currency: CURRENCIES[0],
   branding: DEFAULT_BRANDING,
@@ -172,6 +187,13 @@ function sanitizeStatuses(raw: unknown): string[] {
   if (!base.includes("Open")) base.unshift("Open");
   if (!base.includes("Closed")) base.push("Closed");
   return base;
+}
+
+/** Positive whole number of days, clamped to 1–365; anything else falls back. */
+function sanitizeCadence(raw: unknown): number {
+  const n = typeof raw === "number" ? Math.round(raw) : NaN;
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_CONFIG.reviewCadenceDays;
+  return Math.min(Math.max(n, 1), 365);
 }
 
 function sanitizeCurrency(raw: unknown): CurrencyConfig {
@@ -229,6 +251,9 @@ export function sanitizeConfig(raw: unknown): AppConfig {
     changeCategories: isStringList(r.changeCategories)
       ? [...(r.changeCategories as string[])]
       : clone(DEFAULT_CONFIG.changeCategories),
+    changeImpactAreas: isStringList(r.changeImpactAreas)
+      ? [...(r.changeImpactAreas as string[])]
+      : clone(DEFAULT_CONFIG.changeImpactAreas),
     workstreams: isStringList(r.workstreams)
       ? [...(r.workstreams as string[])]
       : clone(DEFAULT_CONFIG.workstreams),
@@ -236,6 +261,7 @@ export function sanitizeConfig(raw: unknown): AppConfig {
       ? [...(r.projectTypes as string[])]
       : clone(DEFAULT_CONFIG.projectTypes),
     riskStatuses: sanitizeStatuses(r.riskStatuses),
+    reviewCadenceDays: sanitizeCadence(r.reviewCadenceDays),
     matrix: sanitizeMatrix(r.matrix),
     currency: sanitizeCurrency(r.currency),
     branding: sanitizeBranding(r.branding),

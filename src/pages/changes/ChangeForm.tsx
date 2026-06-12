@@ -29,6 +29,8 @@ interface FormState {
   costImpact: string;
   scheduleImpactDays: string;
   linkedRiskRefs: string[];
+  impactAreas: string[];
+  plannedImplementationDate: string;
   costProfile: CostProfile;
 }
 
@@ -56,6 +58,8 @@ function toInput(f: FormState): ChangeInput {
     scheduleImpactDays: parseNum(f.scheduleImpactDays),
     projectId: isProject ? f.projectId || null : null,
     linkedRiskRefs: f.linkedRiskRefs,
+    impactAreas: f.impactAreas,
+    plannedImplementationDate: f.plannedImplementationDate || null,
     requiredBy: f.requiredBy || null,
   };
 }
@@ -240,6 +244,50 @@ function ChangeInfoFields({
   );
 }
 
+/** Checkbox-chip group for the configured impact areas (RiskLinker pattern).
+    Legacy values already on the record stay toggleable so edits don't strand
+    them. */
+function ImpactAreaPicker({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: string[];
+  selected: string[];
+  onToggle: (area: string) => void;
+}) {
+  const all = [...options, ...selected.filter((v) => !options.includes(v))];
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {all.map((area) => {
+        const on = selected.includes(area);
+        return (
+          <div
+            key={area}
+            onClick={() => onToggle(area)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 10px",
+              borderRadius: 6,
+              cursor: "pointer",
+              border: `1px solid ${on ? T.brand : T.stroke}`,
+              background: on ? T.brandBg : T.surface,
+              fontSize: 12.5,
+              fontWeight: 600,
+              color: on ? T.brand : T.textSec,
+            }}
+          >
+            <input type="checkbox" checked={on} readOnly style={{ accentColor: T.brand }} />
+            {area}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ImpactFields({
   f,
   set,
@@ -249,9 +297,37 @@ function ImpactFields({
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
   errors: Record<string, string>;
 }) {
+  const { config } = useAppData();
+  const onToggleArea = useCallback(
+    (area: string) =>
+      set(
+        "impactAreas",
+        f.impactAreas.includes(area)
+          ? f.impactAreas.filter((a) => a !== area)
+          : [...f.impactAreas, area],
+      ),
+    [f.impactAreas, set],
+  );
   return (
     <>
       <SubHead>Impact Assessment</SubHead>
+      <Grid2>
+        <Field label="Impact Areas">
+          <ImpactAreaPicker
+            options={config.changeImpactAreas}
+            selected={f.impactAreas}
+            onToggle={onToggleArea}
+          />
+        </Field>
+        <Field label="Planned Implementation Date">
+          <Input
+            type="date"
+            value={f.plannedImplementationDate}
+            onChange={(e) => set("plannedImplementationDate", e.target.value)}
+          />
+        </Field>
+      </Grid2>
+      <div style={{ height: 14 }} />
       <Grid2>
         <Field
           label={`Cost Impact (${currencySymbol()}) — negative for a saving`}
@@ -325,6 +401,8 @@ export function AddChange() {
     costImpact: "",
     scheduleImpactDays: "",
     linkedRiskRefs: [],
+    impactAreas: [],
+    plannedImplementationDate: "",
     costProfile: evenProfile(0, currentMonthKey(), 12),
   }));
 
@@ -468,6 +546,8 @@ export function EditChange() {
           costImpact: String(change.costImpact),
           scheduleImpactDays: String(change.scheduleImpactDays),
           linkedRiskRefs: change.linkedRiskRefs,
+          impactAreas: change.impactAreas,
+          plannedImplementationDate: change.plannedImplementationDate ?? "",
           costProfile: change.costProfile,
         }
       : null,

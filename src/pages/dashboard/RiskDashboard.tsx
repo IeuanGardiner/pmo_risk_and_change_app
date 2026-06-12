@@ -14,7 +14,7 @@ import { useAppData } from "../../store/AppData";
 import { useTheme } from "../../theme/ThemeProvider";
 import { CHART_COLORS, LEVEL_STYLES, T } from "../../theme/tokens";
 import type { Risk } from "../../types/domain";
-import { RISK_LEVELS } from "../../types/lookups";
+import { isOpenAction, RISK_LEVELS } from "../../types/lookups";
 import { countByCategory, countByMonth, drawdownSeries } from "../../utils/chartData";
 import { currencySymbol, formatDate, formatDateTime, isOverdue, money } from "../../utils/format";
 
@@ -73,6 +73,12 @@ export function RiskDashboard() {
           const reasons: string[] = [];
           if (isOverdue(r.nextReviewDate)) reasons.push("Review overdue");
           if (isOverdue(r.targetDate)) reasons.push("Target date passed");
+          const overdueActions = r.actions.filter(
+            (a) => isOpenAction(a) && isOverdue(a.dueDate),
+          ).length;
+          if (overdueActions > 0) {
+            reasons.push(`${overdueActions} action${overdueActions === 1 ? "" : "s"} overdue`);
+          }
           return reasons.length ? { risk: r, reasons } : null;
         })
         .filter((x): x is { risk: Risk; reasons: string[] } => x !== null)
@@ -195,12 +201,12 @@ export function RiskDashboard() {
 
       {/* Attention needed */}
       <Card style={{ padding: 18, marginBottom: 18 }}>
-        <SectionTitle sub="Open risks with an overdue review or a passed target date">
+        <SectionTitle sub="Open risks with an overdue review, a passed target date or overdue mitigation actions">
           Attention Needed {attention.length > 0 && `(${attention.length})`}
         </SectionTitle>
         {attention.length === 0 ? (
           <div style={{ fontSize: 13, color: T.low, fontWeight: 600 }}>
-            All reviews and target dates are up to date.
+            All reviews, target dates and mitigation actions are up to date.
           </div>
         ) : (
           attention.map(({ risk, reasons }) => (

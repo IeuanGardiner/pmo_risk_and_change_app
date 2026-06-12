@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { FolderKanban, RotateCcw, Save } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Btn, Card, Field, PageHeader, SectionTitle, Select } from "../../components/ui";
+import { Btn, Card, Field, Input, PageHeader, SectionTitle, Select } from "../../components/ui";
 import { useAuth } from "../../auth/AuthContext";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
@@ -36,6 +36,7 @@ export function SettingsPage() {
       risks.filter((r) => r.scope === "Program" && r.category === v).length,
     workstream: (v: string) => risks.filter((r) => r.workstream === v).length,
     changeCategory: (v: string) => changes.filter((c) => c.category === v).length,
+    changeImpactArea: (v: string) => changes.filter((c) => c.impactAreas.includes(v)).length,
     riskStatus: (v: string) => risks.filter((r) => r.status === v).length,
     projectType: (v: string) => projects.filter((p) => p.type === v).length,
   };
@@ -173,6 +174,33 @@ export function SettingsPage() {
               </Field>
             </div>
           </Card>
+
+          <Card style={{ padding: 18 }}>
+            <SectionTitle sub="How often risks should be formally reviewed">
+              Review Cadence
+            </SectionTitle>
+            <div style={{ maxWidth: 260 }}>
+              <Field label="Default review cadence (days)">
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={365}
+                  value={draft.reviewCadenceDays}
+                  onChange={(e) => {
+                    const n = Math.round(Number(e.target.value));
+                    setPart(
+                      "reviewCadenceDays",
+                      Number.isFinite(n) && n >= 1 ? Math.min(n, 365) : 30,
+                    );
+                  }}
+                />
+              </Field>
+              <div style={{ fontSize: 11.5, color: T.textTer, marginTop: 6, lineHeight: 1.5 }}>
+                Used to pre-fill the next review date when a review is logged
+              </div>
+            </div>
+          </Card>
         </div>
       </div>
 
@@ -211,6 +239,15 @@ export function SettingsPage() {
             values={draft.changeCategories}
             usageCount={usage.changeCategory}
             onChange={(v) => setPart("changeCategories", v)}
+          />
+        </Card>
+        <Card style={{ padding: 18 }}>
+          <LookupListEditor
+            title="Change impact areas"
+            sub="What a change can impact — offered as chips on the change form"
+            values={draft.changeImpactAreas}
+            usageCount={usage.changeImpactArea}
+            onChange={(v) => setPart("changeImpactAreas", v)}
           />
         </Card>
         <Card style={{ padding: 18 }}>

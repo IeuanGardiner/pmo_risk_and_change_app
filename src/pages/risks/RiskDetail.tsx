@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  Archive, ArchiveRestore, ArrowLeft, CheckCircle2, Pencil, Plus,
+  Archive, ArchiveRestore, ArrowLeft, CalendarCheck, CheckCircle2, Pencil, Plus,
 } from "lucide-react";
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -16,19 +16,22 @@ import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { useTheme } from "../../theme/ThemeProvider";
 import { LEVEL_STYLES, RISK_EVENT_STYLES, T } from "../../theme/tokens";
-import type { RiskEvent } from "../../types/domain";
-import { IMPACTS, isClosed, LIKELIHOODS } from "../../types/lookups";
+import type { MatrixGrid } from "../../types/config";
+import type { RiskEvent, RiskReview } from "../../types/domain";
+import { calcLevel, calcScore, IMPACTS, isClosed, LIKELIHOODS } from "../../types/lookups";
 import { profileRangeLabel } from "../../utils/calendar";
 import { riskDrawdown } from "../../utils/chartData";
 import {
   currencySymbol, formatDate, formatDateTime, isOverdue, money, moneyFull, scheduleDays,
 } from "../../utils/format";
+import { RiskActionsCard } from "./RiskActionsCard";
+import { RiskReviewDialog } from "./RiskReviewDialog";
 import { RiskUpdateDialog } from "./RiskUpdateDialog";
 
 export function RiskDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
-  const { risks, changes, projects, closeRisk, archiveRisk, restoreRisk } = useAppData();
+  const { risks, changes, projects, config, closeRisk, archiveRisk, restoreRisk } = useAppData();
   const chartColors = useTheme().chartColors;
   const { can } = useAuth();
   const toast = useToast();
@@ -36,6 +39,7 @@ export function RiskDetail() {
   const [archiving, setArchiving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [update, setUpdate] = useState<{ closing: boolean } | null>(null);
+  const [reviewing, setReviewing] = useState(false);
 
   const risk = risks.find((r) => r.riskReference === ref);
   usePageTitle(risk ? `Risk ${risk.riskReference}` : "Risk not found");
@@ -94,6 +98,7 @@ export function RiskDetail() {
         ] as [string, ReactNode][])
       : []),
     ["Proximity", risk.proximity ?? "—"],
+    ["Response Strategy", risk.responseStrategy ?? "—"],
     ["Schedule Impact", scheduleDays(risk.scheduleImpactDays)],
     ["Status", risk.status],
     [
@@ -171,6 +176,8 @@ export function RiskDetail() {
         onClose={() => setUpdate(null)}
       />
 
+      <RiskReviewDialog open={reviewing} risk={risk} onClose={() => setReviewing(false)} />
+
       <PageHeader
         title={`Risk Detail – ${risk.riskReference}`}
         action={
@@ -202,6 +209,11 @@ export function RiskDetail() {
                 )}
                 {!closed && (
                   <>
+                    {can("risks:update") && (
+                      <Btn variant="default" icon={CalendarCheck} onClick={() => setReviewing(true)}>
+                        Log Review
+                      </Btn>
+                    )}
                     {can("risks:update") && (
                       <Btn variant="primary" icon={Plus} onClick={() => setUpdate({ closing: false })}>
                         Log Update
@@ -301,6 +313,7 @@ export function RiskDetail() {
             <SectionTitle>Mitigation Plan</SectionTitle>
             <div style={{ fontSize: 13, color: T.textSec, lineHeight: 1.6 }}>{risk.mitigation}</div>
           </Card>
+          <RiskActionsCard risk={risk} />
           {risk.comments && (
             <Card style={{ padding: 18 }}>
               <SectionTitle>Comments / Notes</SectionTitle>
@@ -400,6 +413,14 @@ export function RiskDetail() {
         </ResponsiveContainer>
       </Card>
 
+      {/* Review history */}
+      <Card style={{ padding: 18, marginBottom: 16 }}>
+        <SectionTitle sub="Formal reviews logged against this risk, with any re-scoring">
+          Review History {risk.reviews.length > 0 && `(${risk.reviews.length})`}
+        </SectionTitle>
+        <ReviewHistory reviews={risk.reviews} matrix={config.matrix} />
+      </Card>
+
       {/* Risk change log */}
       <Card style={{ padding: 18 }}>
         <SectionTitle sub="Realised, released and reduced updates recorded against this risk">
@@ -407,6 +428,70 @@ export function RiskDetail() {
         </SectionTitle>
         <ChangeLog events={risk.events} createdAt={risk.createdAt} estimated={risk.estimatedTotal} />
       </Card>
+    </div>
+  );
+}
+
+/* Newest-first review timeline, showing the score movement of each review. */
+function ReviewHistory({ reviews, matrix }: { reviews: RiskReview[]; matrix: MatrixGrid }) {
+  if (reviews.length === 0) {
+    return <div style={{ fontSize: 13, color: T.textTer }}>No reviews logged yet.</div>;
+  }
+  const ordered = [...reviews].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {ordered.map((r) => {
+        const prevScore = calcScore(r.previousLikelihood, r.previousImpact);
+        const prevLevel = calcLevel(matrix, r.previousLikelihood, r.previousImpact);
+        const newScore = calcScore(r.likelihood, r.impact);
+        const newLevel = calcLevel(matrix, r.likelihood, r.impact);
+        const changed = prevScore !== newScore || prevLevel !== newLevel;
+        return (
+          <div
+            key={r.id}
+            style={{
+              display: "flex",
+              gap: 12,
+              padding: "12px 0",
+              borderTop: `1px solid ${T.strokeSubtle}`,
+              fontSize: 13,
+            }}
+          >
+            <CalendarCheck size={16} style={{ color: T.brand, flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontWeight: 700, color: T.text }}>{formatDate(r.date)}</span>
+                <span style={{ color: T.textTer, fontSize: 12 }}>by {r.reviewer}</span>
+                <span style={{ marginLeft: "auto" }}>
+                  {changed ? (
+                    <span style={{ fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap" }}>
+                      <span style={{ color: LEVEL_STYLES[prevLevel].c }}>
+                        {prevScore} {prevLevel}
+                      </span>
+                      <span style={{ color: T.textTer }}> → </span>
+                      <span style={{ color: LEVEL_STYLES[newLevel].c }}>
+                        {newScore} {newLevel}
+                      </span>
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 12, color: T.textTer }}>
+                      No change ({newScore} {newLevel})
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div style={{ fontSize: 12.5, color: T.textSec, marginTop: 3, lineHeight: 1.5 }}>
+                {r.comment}
+              </div>
+              {r.nextReviewDate && (
+                <div style={{ fontSize: 11, color: T.textTer, marginTop: 3 }}>
+                  Next review set to {formatDate(r.nextReviewDate)}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

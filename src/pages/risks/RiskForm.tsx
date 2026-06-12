@@ -9,14 +9,23 @@ import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { LEVEL_STYLES, T } from "../../theme/tokens";
-import type { CostProfile, Rating, RiskInput, RiskProximity, Scope } from "../../types/domain";
+import type {
+  CostProfile,
+  Rating,
+  RiskInput,
+  RiskProximity,
+  RiskResponseStrategy,
+  Scope,
+} from "../../types/domain";
 import {
   calcLevel,
   calcScore,
   IMPACTS,
   LIKELIHOODS,
   OPEN_STATUS,
+  RESPONSE_STRATEGY_HELP,
   RISK_PROXIMITIES,
+  RISK_RESPONSE_STRATEGIES,
 } from "../../types/lookups";
 import { currentMonthKey, evenProfile } from "../../utils/calendar";
 import { currencySymbol, parseNum } from "../../utils/format";
@@ -38,6 +47,7 @@ interface FormState {
   targetDate: string;
   nextReviewDate: string;
   projectId: string;
+  responseStrategy: string;
   mitigation: string;
   comments: string;
   estimatedTotal: string;
@@ -61,6 +71,7 @@ const emptyForm = (defaultProjectId: string): FormState => ({
   targetDate: "",
   nextReviewDate: "",
   projectId: defaultProjectId,
+  responseStrategy: "",
   mitigation: "",
   comments: "",
   estimatedTotal: "",
@@ -126,6 +137,7 @@ function toInput(f: FormState): RiskInput {
       f.costProfile.distribution === "Even"
         ? evenProfile(total, f.costProfile.startMonth, f.costProfile.periods.length)
         : f.costProfile,
+    responseStrategy: (f.responseStrategy || null) as RiskResponseStrategy | null,
     mitigation: f.mitigation.trim(),
     comments: f.comments.trim(),
     linkedChangeRefs: [],
@@ -181,6 +193,33 @@ function TargetLevelRow({
         </div>
       )}
     </>
+  );
+}
+
+/** Response Strategy select with the one-line PRINCE2 helper underneath. */
+function ResponseStrategyField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div style={{ maxWidth: 320, marginBottom: 14 }}>
+      <Field label="Response Strategy">
+        <Select
+          value={value}
+          onChange={onChange}
+          options={RISK_RESPONSE_STRATEGIES}
+          placeholder="Select strategy…"
+        />
+      </Field>
+      {value && (
+        <div style={{ fontSize: 12, color: T.textTer, marginTop: 6, lineHeight: 1.5 }}>
+          {RESPONSE_STRATEGY_HELP[value as RiskResponseStrategy]}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -414,6 +453,10 @@ export function AddRisk() {
 
             <Divider />
             <SubHead>Mitigation &amp; Response</SubHead>
+            <ResponseStrategyField
+              value={f.responseStrategy}
+              onChange={(v) => set("responseStrategy", v)}
+            />
             <TextArea
               style={{ minHeight: 80 }}
               placeholder="Mitigation plan…"
@@ -533,6 +576,7 @@ export function EditRisk() {
           targetDate: risk.targetDate ?? "",
           nextReviewDate: risk.nextReviewDate ?? "",
           projectId: risk.projectId ?? "",
+          responseStrategy: risk.responseStrategy ?? "",
           mitigation: risk.mitigation,
           comments: risk.comments,
           estimatedTotal: String(risk.estimatedTotal),
@@ -768,6 +812,12 @@ export function EditRisk() {
           </div>
         )}
 
+        <Divider />
+        <SubHead>Mitigation &amp; Response</SubHead>
+        <ResponseStrategyField
+          value={f.responseStrategy}
+          onChange={(v) => set("responseStrategy", v)}
+        />
         <div style={{ marginTop: 14 }}>
           <Field label="Mitigation Plan">
             <TextArea value={f.mitigation} onChange={(e) => set("mitigation", e.target.value)} />

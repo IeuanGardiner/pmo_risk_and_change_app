@@ -60,10 +60,13 @@ export function ChangeRegister() {
   const exportCsv = () =>
     downloadCsv(
       `change-register-${scope.toLowerCase()}.csv`,
-      ["Reference", "Title", "Scope", "Category", "Priority", "Status", "Raised By", "Owner", "Cost Impact", "Schedule Days", "Required By", "Project", "Profile Start", "Profile Months", "Linked Risks"],
+      ["Reference", "Title", "Scope", "Category", "Priority", "Status", "Raised By", "Owner", "Cost Impact", "Schedule Days", "Impact Areas", "Required By", "Planned Implementation", "Actual Implementation", "Project", "Profile Start", "Profile Months", "Linked Risks"],
       sorted.map((c) => [
         c.changeReference, c.title, c.scope, c.category, c.priority, c.status, c.raisedBy, c.owner,
-        c.costImpact, c.scheduleImpactDays, c.requiredBy ?? "",
+        c.costImpact, c.scheduleImpactDays,
+        c.impactAreas.join("; "),
+        c.requiredBy ?? "",
+        c.plannedImplementationDate ?? "", c.actualImplementationDate ?? "",
         scope === "Project" ? projectName(c.projectId) : "",
         c.costProfile.startMonth, c.costProfile.periods.length,
         c.linkedRiskRefs.join("; "),

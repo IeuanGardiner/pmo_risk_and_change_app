@@ -10,11 +10,21 @@ import type {
   ProjectInput,
   Rating,
   Risk,
+  RiskAction,
+  RiskActionInput,
   RiskEvent,
   RiskEventInput,
   RiskInput,
+  RiskReview,
+  RiskReviewInput,
 } from "../../types/domain";
-import { calcLevel, calcScore, CLOSED_STATUS, RISK_EVENT_TYPES } from "../../types/lookups";
+import {
+  calcLevel,
+  calcScore,
+  CLOSED_STATUS,
+  RISK_ACTION_STATUSES,
+  RISK_EVENT_TYPES,
+} from "../../types/lookups";
 import { isMonthKey, MAX_PROFILE_MONTHS } from "../../utils/calendar";
 import type {
   ChangeService,
@@ -39,6 +49,7 @@ const delay = <V,>(value: V): Promise<V> =>
 
 const clone = <V,>(v: V): V => JSON.parse(JSON.stringify(v)) as V;
 const nowIso = () => new Date().toISOString();
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const nextRef = (prefix: string, existing: string[]): string => {
   const max = existing.reduce((acc, ref) => {
@@ -168,6 +179,8 @@ export function createMockServices(): Services {
         releasedTotal: 0,
         reducedTotal: 0,
         events: [],
+        actions: [],
+        reviews: [],
         archived: false,
         createdAt: nowIso(),
         updatedAt: nowIso(),
@@ -231,19 +244,146 @@ export function createMockServices(): Services {
       risks = risks.map((r) => (r.riskReference === ref ? merged : r));
       return delay(clone(merged));
     },
+    addAction: (ref, input: RiskActionInput) => {
+      const existing = risks.find((r) => r.riskReference === ref);
+      if (!existing) return Promise.reject(new Error(`Risk ${ref} not found`));
+      if (!input.title.trim()) return Promise.reject(new Error("Action title is required"));
+      if (!input.owner.trim()) return Promise.reject(new Error("Action owner is required"));
+      if (!RISK_ACTION_STATUSES.includes(input.status)) {
+        return Promise.reject(new Error(`Unknown action status "${input.status}"`));
+      }
+      if (input.dueDate && !ISO_DATE.test(input.dueDate)) {
+        return Promise.reject(new Error("Due date must be a valid date (yyyy-mm-dd)"));
+      }
+      const entry: RiskAction = {
+        id: `${ref}-a${existing.actions.length + 1}`,
+        title: input.title.trim(),
+        owner: input.owner.trim(),
+        dueDate: input.dueDate,
+        status: input.status,
+        completedDate: input.status === "Complete" ? todayIso() : null,
+        notes: input.notes.trim(),
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      const merged: Risk = {
+        ...existing,
+        actions: [...existing.actions, entry],
+        updatedAt: nowIso(),
+      };
+      risks = risks.map((r) => (r.riskReference === ref ? merged : r));
+      return delay(clone(merged));
+    },
+    updateAction: (ref, actionId, patch) => {
+      const existing = risks.find((r) => r.riskReference === ref);
+      if (!existing) return Promise.reject(new Error(`Risk ${ref} not found`));
+      const action = existing.actions.find((a) => a.id === actionId);
+      if (!action) return Promise.reject(new Error(`Action ${actionId} not found on ${ref}`));
+      if (patch.title !== undefined && !patch.title.trim()) {
+        return Promise.reject(new Error("Action title is required"));
+      }
+      if (patch.owner !== undefined && !patch.owner.trim()) {
+        return Promise.reject(new Error("Action owner is required"));
+      }
+      if (patch.status !== undefined && !RISK_ACTION_STATUSES.includes(patch.status)) {
+        return Promise.reject(new Error(`Unknown action status "${patch.status}"`));
+      }
+      if (patch.dueDate != null && !ISO_DATE.test(patch.dueDate)) {
+        return Promise.reject(new Error("Due date must be a valid date (yyyy-mm-dd)"));
+      }
+      const next: RiskAction = { ...action, ...patch, updatedAt: nowIso() };
+      // completedDate tracks the status: stamped entering Complete, cleared leaving.
+      if (next.status === "Complete" && !next.completedDate) next.completedDate = todayIso();
+      if (next.status !== "Complete") next.completedDate = null;
+      const merged: Risk = {
+        ...existing,
+        actions: existing.actions.map((a) => (a.id === actionId ? next : a)),
+        updatedAt: nowIso(),
+      };
+      risks = risks.map((r) => (r.riskReference === ref ? merged : r));
+      return delay(clone(merged));
+    },
+    deleteAction: (ref, actionId) => {
+      const existing = risks.find((r) => r.riskReference === ref);
+      if (!existing) return Promise.reject(new Error(`Risk ${ref} not found`));
+      if (!existing.actions.some((a) => a.id === actionId)) {
+        return Promise.reject(new Error(`Action ${actionId} not found on ${ref}`));
+      }
+      const merged: Risk = {
+        ...existing,
+        actions: existing.actions.filter((a) => a.id !== actionId),
+        updatedAt: nowIso(),
+      };
+      risks = risks.map((r) => (r.riskReference === ref ? merged : r));
+      return delay(clone(merged));
+    },
+    addReview: (ref, input: RiskReviewInput) => {
+      const existing = risks.find((r) => r.riskReference === ref);
+      if (!existing) return Promise.reject(new Error(`Risk ${ref} not found`));
+      if (!ISO_DATE.test(input.date)) {
+        return Promise.reject(new Error("Review date must be a valid date (yyyy-mm-dd)"));
+      }
+      if (!input.comment.trim()) {
+        return Promise.reject(new Error("Review comment is required"));
+      }
+      if (input.likelihood < 1 || input.likelihood > 5 || input.impact < 1 || input.impact > 5) {
+        return Promise.reject(new Error("Likelihood and impact must be ratings between 1 and 5"));
+      }
+      if (input.nextReviewDate && !ISO_DATE.test(input.nextReviewDate)) {
+        return Promise.reject(new Error("Next review date must be a valid date (yyyy-mm-dd)"));
+      }
+      const entry: RiskReview = {
+        id: `${ref}-rv${existing.reviews.length + 1}`,
+        date: input.date,
+        reviewer: CURRENT_USER.name,
+        comment: input.comment.trim(),
+        previousLikelihood: existing.likelihood,
+        previousImpact: existing.impact,
+        likelihood: input.likelihood,
+        impact: input.impact,
+        nextReviewDate: input.nextReviewDate,
+        createdAt: nowIso(),
+      };
+      // The review's assessment becomes the risk's current scoring (target
+      // fields are untouched — they remain the post-mitigation ambition).
+      const merged: Risk = {
+        ...existing,
+        likelihood: input.likelihood,
+        impact: input.impact,
+        score: calcScore(input.likelihood, input.impact),
+        level: calcLevel(config.matrix, input.likelihood, input.impact),
+        nextReviewDate: input.nextReviewDate,
+        reviews: [...existing.reviews, entry],
+        updatedAt: nowIso(),
+      };
+      risks = risks.map((r) => (r.riskReference === ref ? merged : r));
+      return delay(clone(merged));
+    },
     close: (ref) => riskService.update(ref, { status: CLOSED_STATUS }),
     archive: (ref) => setArchived(ref, true),
     restore: (ref) => setArchived(ref, false),
+  };
+
+  /** New impact-area selections must come from config; values already on the
+      record are tolerated (mirrors the withCurrent leniency for lookups). */
+  const impactAreasError = (values: string[] | undefined, current: string[] = []): string | null => {
+    if (!values) return null;
+    const unknown = values.find(
+      (v) => !current.includes(v) && !config.changeImpactAreas.includes(v),
+    );
+    return unknown ? `Unknown impact area "${unknown}" — configure it in Settings first` : null;
   };
 
   const changeService: ChangeService = {
     list: () => delay(clone(changes)),
     get: (ref) => delay(clone(changes.find((c) => c.changeReference === ref) ?? null)),
     create: (input: ChangeInput) => {
-      const invalid = profileError(input.costProfile);
+      const invalid = profileError(input.costProfile) ?? impactAreasError(input.impactAreas);
       if (invalid) return Promise.reject(new Error(invalid));
       const rec: ChangeRequest = {
         ...input,
+        impactAreas: input.impactAreas ?? [],
+        actualImplementationDate: null,
         changeReference: nextRef("C", changes.map((c) => c.changeReference)),
         status: "Draft",
         approvalHistory: [{ status: "Draft", actor: CURRENT_USER.name, date: nowIso() }],
@@ -257,14 +397,16 @@ export function createMockServices(): Services {
     update: (ref, patch) => {
       const existing = changes.find((c) => c.changeReference === ref);
       if (!existing) return Promise.reject(new Error(`Change ${ref} not found`));
-      const invalid = profileError(patch.costProfile);
+      const invalid =
+        profileError(patch.costProfile) ??
+        impactAreasError(patch.impactAreas, existing.impactAreas);
       if (invalid) return Promise.reject(new Error(invalid));
       const merged: ChangeRequest = { ...existing, ...patch, updatedAt: nowIso() };
       changes = changes.map((c) => (c.changeReference === ref ? merged : c));
       if (patch.linkedRiskRefs) syncRiskLinks(ref, patch.linkedRiskRefs);
       return delay(clone(merged));
     },
-    transition: (ref, action, note) => {
+    transition: (ref, action, note, date) => {
       const existing = changes.find((c) => c.changeReference === ref);
       if (!existing) return Promise.reject(new Error(`Change ${ref} not found`));
       const rule = TRANSITIONS[action];
@@ -273,9 +415,22 @@ export function createMockServices(): Services {
           new Error(`Cannot ${action} a change in status "${existing.status}"`),
         );
       }
+      if (action === "implement" && date && !ISO_DATE.test(date)) {
+        return Promise.reject(
+          new Error("Implementation date must be a valid date (yyyy-mm-dd)"),
+        );
+      }
       const merged: ChangeRequest = {
         ...existing,
         status: rule.to,
+        // actualImplementationDate is owned by this transition: stamped on
+        // implement (today when no date given), cleared on reopen for safety.
+        actualImplementationDate:
+          action === "implement"
+            ? date ?? todayIso()
+            : action === "reopen"
+              ? null
+              : existing.actualImplementationDate,
         approvalHistory: [
           ...existing.approvalHistory,
           { status: rule.to, actor: CURRENT_USER.name, date: nowIso(), note },

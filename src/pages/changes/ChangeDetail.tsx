@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import {
@@ -18,7 +18,7 @@ import { CHANGE_TRANSITION_PERMISSIONS } from "../../types/auth";
 import type { ChangeTransitionAction } from "../../types/domain";
 import { profileRangeLabel } from "../../utils/calendar";
 import { profileSeries } from "../../utils/chartData";
-import { formatDate, formatDateTime, money, moneyFull, scheduleDays } from "../../utils/format";
+import { formatDate, formatDateTime, isOverdue, money, moneyFull, scheduleDays } from "../../utils/format";
 
 /** Workflow actions offered for each status. */
 const ACTIONS_BY_STATUS: Record<string, { action: ChangeTransitionAction; label: string; variant: "primary" | "dark" | "danger" | "success" }[]> = {
@@ -45,6 +45,7 @@ export function ChangeDetail() {
   const { can } = useAuth();
   const toast = useToast();
   const [note, setNote] = useState("");
+  const [implDate, setImplDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -82,7 +83,12 @@ export function ChangeDetail() {
   const run = async (action: ChangeTransitionAction) => {
     setBusy(true);
     try {
-      const rec = await transitionChange(change.changeReference, action, note.trim() || undefined);
+      const rec = await transitionChange(
+        change.changeReference,
+        action,
+        note.trim() || undefined,
+        action === "implement" ? implDate || undefined : undefined,
+      );
       setNote("");
       toast.success(`${rec.changeReference} moved to "${rec.status}"`);
     } catch (e) {
@@ -105,7 +111,10 @@ export function ChangeDetail() {
     }
   };
 
-  const detailRows: [string, string][] = [
+  const implementationOverdue =
+    change.status === "Approved" && isOverdue(change.plannedImplementationDate);
+
+  const detailRows: [string, ReactNode][] = [
     ["Category", change.category],
     ["Scope", change.scope],
     ["Priority", change.priority],
@@ -118,7 +127,40 @@ export function ChangeDetail() {
         ? `${project.name} (${project.code})${project.client ? ` · ${project.client}` : ""}`
         : "— Programme —",
     ],
+    [
+      "Impact Areas",
+      change.impactAreas.length === 0 ? (
+        "—"
+      ) : (
+        <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {change.impactAreas.map((area) => (
+            <span
+              key={area}
+              style={{
+                border: `1px solid ${T.stroke}`,
+                borderRadius: 4,
+                padding: "1px 7px",
+                fontSize: 11,
+                fontWeight: 600,
+                color: T.textSec,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {area}
+            </span>
+          ))}
+        </span>
+      ),
+    ],
     ["Required By", formatDate(change.requiredBy)],
+    [
+      "Planned Implementation",
+      <span style={{ color: implementationOverdue ? T.critical : undefined }}>
+        {formatDate(change.plannedImplementationDate)}
+        {implementationOverdue && " — overdue"}
+      </span>,
+    ],
+    ["Actual Implementation", formatDate(change.actualImplementationDate)],
     ["Cost Impact", moneyFull(change.costImpact)],
     ["Cost Profile", profileRangeLabel(change.costProfile)],
     ["Schedule Impact", scheduleDays(change.scheduleImpactDays)],
@@ -189,6 +231,16 @@ export function ChangeDetail() {
                 onChange={(e) => setNote(e.target.value)}
               />
             </div>
+            {actions.some((a) => a.action === "implement") && (
+              <div style={{ width: 160 }}>
+                <Input
+                  type="date"
+                  aria-label="Implementation date"
+                  value={implDate}
+                  onChange={(e) => setImplDate(e.target.value)}
+                />
+              </div>
+            )}
             {actions.map((a) => (
               <Btn key={a.action} variant={a.variant} onClick={() => void run(a.action)} loading={busy}>
                 {a.label}

@@ -7,8 +7,10 @@ import type {
   Project,
   ProjectInput,
   Risk,
+  RiskActionInput,
   RiskEventInput,
   RiskInput,
+  RiskReviewInput,
 } from "../types/domain";
 
 /* ============================================================================
@@ -27,6 +29,14 @@ export interface RiskService {
   /** Append a draw-down event (realised / released / reduced) to the ledger.
       Recomputes derived totals and optionally closes the risk. */
   addEvent(ref: string, event: RiskEventInput): Promise<Risk>;
+  /** Append a mitigation action to the risk's action plan. */
+  addAction(ref: string, input: RiskActionInput): Promise<Risk>;
+  /** Patch an action; completedDate is stamped/cleared on Complete transitions. */
+  updateAction(ref: string, actionId: string, patch: Partial<RiskActionInput>): Promise<Risk>;
+  deleteAction(ref: string, actionId: string): Promise<Risk>;
+  /** Log a formal review: re-scores the risk and sets the next review date.
+      Reviews are append-only — there are no update/delete endpoints. */
+  addReview(ref: string, input: RiskReviewInput): Promise<Risk>;
   close(ref: string): Promise<Risk>;
   archive(ref: string): Promise<Risk>;
   restore(ref: string): Promise<Risk>;
@@ -37,8 +47,14 @@ export interface ChangeService {
   get(ref: string): Promise<ChangeRequest | null>;
   create(input: ChangeInput): Promise<ChangeRequest>;
   update(ref: string, patch: Partial<ChangeInput>): Promise<ChangeRequest>;
-  /** Moves the change through its workflow (submit, approve, reject…). */
-  transition(ref: string, action: ChangeTransitionAction, note?: string): Promise<ChangeRequest>;
+  /** Moves the change through its workflow (submit, approve, reject…).
+      `date` is honoured only for "implement" (defaults to today when omitted). */
+  transition(
+    ref: string,
+    action: ChangeTransitionAction,
+    note?: string,
+    date?: string,
+  ): Promise<ChangeRequest>;
   /** Permanently removes a change. Only Draft changes may be deleted. */
   delete(ref: string): Promise<void>;
 }

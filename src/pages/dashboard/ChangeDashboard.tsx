@@ -14,7 +14,7 @@ import { T } from "../../theme/tokens";
 import type { ChangeRequest, ChangeStatus } from "../../types/domain";
 import { CHANGE_STATUSES } from "../../types/lookups";
 import { costByCategory, countByMonth } from "../../utils/chartData";
-import { currencySymbol, formatDateTime, money, scheduleDays } from "../../utils/format";
+import { currencySymbol, formatDateTime, isOverdue, money, scheduleDays } from "../../utils/format";
 
 export function ChangeDashboard() {
   const { changes } = useAppData();
@@ -63,6 +63,9 @@ export function ChangeDashboard() {
   const netSchedule = changes
     .filter((c) => c.status !== "Rejected" && c.status !== "Draft")
     .reduce((a, c) => a + c.scheduleImpactDays, 0);
+  const overdueToImplement = changes.filter(
+    (c) => c.status === "Approved" && isOverdue(c.plannedImplementationDate),
+  ).length;
 
   const byCat = useMemo(() => costByCategory(changes.filter((c) => c.status !== "Rejected")), [changes]);
   const raisedByMonth = useMemo(() => countByMonth(changes.map((c) => c.createdAt)), [changes]);
@@ -154,12 +157,13 @@ export function ChangeDashboard() {
         <Card style={{ padding: 18 }}>
           <SectionTitle>Cost &amp; Schedule Impact</SectionTitle>
           <div
-            style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 8 }}
+            style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 8 }}
           >
             {[
               { l: "Approved Cost Impact", v: money(approvedCost), c: T.low, s: "Approved + implemented" },
               { l: "Pending Cost Impact", v: money(pendingCost), c: T.purple, s: "Awaiting decision" },
               { l: "Net Schedule Impact", v: scheduleDays(netSchedule), c: T.high, s: "Active changes, days" },
+              { l: "Overdue to Implement", v: String(overdueToImplement), c: T.critical, s: "Approved, past planned date" },
             ].map((x) => (
               <div
                 key={x.l}

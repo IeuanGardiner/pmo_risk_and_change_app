@@ -68,6 +68,73 @@ export interface RiskEventInput {
   closeRisk: boolean;
 }
 
+/* ---- Response strategy & mitigation action plan -------------------------- */
+
+/** PRINCE2-style response types (ISO 31000 "treatment options"). */
+export type RiskResponseStrategy = "Avoid" | "Reduce" | "Transfer" | "Accept" | "Share";
+
+export type RiskActionStatus = "Not Started" | "In Progress" | "Complete" | "Cancelled";
+
+/** A discrete, chaseable mitigation action against a risk. */
+export interface RiskAction {
+  /** Server-owned. */
+  id: string;
+  title: string;
+  owner: string;
+  /** ISO date (yyyy-mm-dd) or null. */
+  dueDate: string | null;
+  status: RiskActionStatus;
+  /** Server-stamped when status transitions into "Complete"; cleared on reopen. */
+  completedDate: string | null;
+  notes: string;
+  /** ISO datetime, server-owned. */
+  createdAt: string;
+  /** ISO datetime, server-owned. */
+  updatedAt: string;
+}
+
+/** Payload for adding/patching an action (server owns id/completedDate/timestamps). */
+export interface RiskActionInput {
+  title: string;
+  owner: string;
+  dueDate: string | null;
+  status: RiskActionStatus;
+  notes: string;
+}
+
+/* ---- Review log ----------------------------------------------------------- */
+
+/** A formal, logged risk review with an optional re-score. Append-only. */
+export interface RiskReview {
+  /** Server-owned. */
+  id: string;
+  /** ISO date the review was held. */
+  date: string;
+  /** Server-stamped from the current user. */
+  reviewer: string;
+  comment: string;
+  /** Server-stamped snapshot of the risk before the review. */
+  previousLikelihood: Rating;
+  previousImpact: Rating;
+  /** The assessment after the review (applied to the risk). */
+  likelihood: Rating;
+  impact: Rating;
+  /** What the review set the risk's next review date to. */
+  nextReviewDate: string | null;
+  /** ISO datetime, server-owned. */
+  createdAt: string;
+}
+
+/** Payload for logging a review (server stamps id, reviewer, the previous
+    ratings snapshot and createdAt). */
+export interface RiskReviewInput {
+  date: string;
+  comment: string;
+  likelihood: Rating;
+  impact: Rating;
+  nextReviewDate: string | null;
+}
+
 export interface Risk {
   riskReference: string;
   scope: Scope;
@@ -111,6 +178,12 @@ export interface Risk {
   costProfile: CostProfile;
   /** Update / draw-down ledger — appended via the risk event endpoint. */
   events: RiskEvent[];
+  /** Chosen response strategy (PRINCE2 response types). */
+  responseStrategy: RiskResponseStrategy | null;
+  /** Mitigation action plan — maintained via the risk action endpoints. */
+  actions: RiskAction[];
+  /** Formal review log — appended via the risk review endpoint. Append-only. */
+  reviews: RiskReview[];
   mitigation: string;
   comments: string;
   linkedChangeRefs: string[];
@@ -134,6 +207,8 @@ export type RiskInput = Omit<
   | "releasedTotal"
   | "reducedTotal"
   | "events"
+  | "actions"
+  | "reviews"
   | "archived"
   | "createdAt"
   | "updatedAt"
@@ -186,6 +261,12 @@ export interface ChangeRequest {
   projectId: string | null;
   linkedRiskRefs: string[];
   approvalHistory: ChangeApprovalEvent[];
+  /** What the change affects (from config.changeImpactAreas); may be empty. */
+  impactAreas: string[];
+  /** When implementation is planned for — ISO date (yyyy-mm-dd) or null. */
+  plannedImplementationDate: string | null;
+  /** SERVER-OWNED: stamped by the "implement" transition only (cleared on reopen). */
+  actualImplementationDate: string | null;
   /** ISO date (yyyy-mm-dd) or null. */
   requiredBy: string | null;
   createdAt: string;
@@ -194,7 +275,12 @@ export interface ChangeRequest {
 
 export type ChangeInput = Omit<
   ChangeRequest,
-  "changeReference" | "status" | "approvalHistory" | "createdAt" | "updatedAt"
+  | "changeReference"
+  | "status"
+  | "approvalHistory"
+  | "actualImplementationDate"
+  | "createdAt"
+  | "updatedAt"
 >;
 
 /* ------------------------------- Reference ------------------------------- */
