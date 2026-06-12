@@ -4,9 +4,12 @@ import type {
   Project,
   Rating,
   Risk,
+  RiskAction,
+  RiskActionStatus,
   RiskEvent,
   RiskEventType,
   RiskProximity,
+  RiskResponseStrategy,
   RiskStatus,
   Scope,
 } from "../../types/domain";
@@ -82,6 +85,16 @@ interface EventSeed {
   closeRisk?: boolean;
 }
 
+interface ActionSeed {
+  title: string;
+  description: string;
+  owner: string;
+  due: string | null;
+  status: RiskActionStatus;
+  /** Set explicitly for Complete actions; otherwise derived. */
+  completed?: string;
+}
+
 interface RiskSeed {
   ref: string;
   scope: Scope;
@@ -96,12 +109,15 @@ interface RiskSeed {
   ti?: Rating;
   proximity?: RiskProximity;
   schedDays?: number;
+  responseStrategy?: RiskResponseStrategy;
   status: RiskStatus;
   target: string;
   review?: string;
   est: number;
   /** Draw-down ledger seed — released/realised/reduced now flow from events. */
   events?: EventSeed[];
+  /** Structured mitigation action plan seed. */
+  actions?: ActionSeed[];
   desc: string;
   mit: string;
   comments: string;
@@ -118,12 +134,17 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R001", scope: "Project", title: "Scaffolding collapse at Level 4 east elevation",
     category: "Safety", workstream: "Civils & Structures", owner: "J. Hayes", l: 5, i: 5,
-    tl: 2, ti: 4, proximity: "Within 3 months", schedDays: 21,
+    tl: 2, ti: 4, proximity: "Within 3 months", schedDays: 21, responseStrategy: "Reduce",
     status: "Open", target: "2026-08-31", review: "2026-06-20",
     est: 4_200_000,
     events: [
       { type: "Released", amount: 1_800_000, date: "2026-03-12", note: "Partial release as the remedial scope was clarified — exposure narrowed." },
       { type: "Realised", amount: 900_000, date: "2026-04-10", note: "Emergency bracing and additional clamps installed following the wind event." },
+    ],
+    actions: [
+      { title: "Install additional bracing and clamps to all east-elevation panels", description: "Fit wind-load rated ties to every panel above Level 3 per the revised scaffold design.", owner: "J. Hayes", due: "2026-04-05", status: "Complete", completed: "2026-04-08" },
+      { title: "Independent scaffold inspection sign-off", description: "Commission a third-party inspector to certify the remediated scaffold before the next lift.", owner: "D. Morgan", due: "2026-05-20", status: "In Progress" },
+      { title: "Reinstate daily wind-monitoring regime", description: "Stand up the daily inspection and >30mph cordon procedure with the site team.", owner: "J. Hayes", due: "2026-05-30", status: "Not Started" },
     ],
     desc: "Scaffolding panels on east elevation Level 4 are not adequately secured. Risk of collapse during high winds or heavy load operations.",
     mit: "Install additional clamps and bracing on all panels. Daily inspection regime in place. Cordon off zone below during wind > 30mph.",
@@ -134,12 +155,16 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R002", scope: "Project", title: "Ground subsidence Zone D",
     category: "Structural", workstream: "Civils & Structures", owner: "S. Patel", l: 4, i: 4,
-    tl: 2, ti: 3, proximity: "Imminent", schedDays: 45,
+    tl: 2, ti: 3, proximity: "Imminent", schedDays: 45, responseStrategy: "Reduce",
     status: "Open", target: "2026-05-15", review: "2026-05-15",
     est: 1_600_000,
     events: [
       { type: "Realised", amount: 120_000, date: "2026-03-20", note: "Additional ground investigation works in Zone D." },
       { type: "Released", amount: 400_000, date: "2026-04-15", note: "Released once the underpinning option was costed below the provision." },
+    ],
+    actions: [
+      { title: "Commission supplementary ground investigation in Zone D", description: "Additional boreholes to confirm the extent of the settlement zone.", owner: "S. Patel", due: "2026-03-18", status: "Complete", completed: "2026-03-20" },
+      { title: "Finalise mini-pile underpinning design", description: "Progress the underpinning design to IFC and align with change C001.", owner: "S. Patel", due: "2026-06-30", status: "In Progress" },
     ],
     desc: "Settlement readings exceeding tolerance near the warehouse slab foundation in Zone D.",
     mit: "Additional ground investigation commissioned; underpinning options under review.",
@@ -218,9 +243,13 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R008", scope: "Project", title: "Subcontractor insolvency – MEP",
     category: "Commercial", workstream: "Commercial", owner: "P. Evans", l: 2, i: 4,
-    tl: 1, ti: 3, proximity: "6-12 months",
+    tl: 1, ti: 3, proximity: "6-12 months", responseStrategy: "Transfer",
     status: "Open", target: "2026-09-30", review: "2026-08-15",
     est: 700_000,
+    actions: [
+      { title: "Secure performance bond from MEP subcontractor", description: "Obtain a performance bond to transfer insolvency exposure under the subcontract.", owner: "P. Evans", due: "2026-07-15", status: "In Progress" },
+      { title: "Prepare contingency tender package", description: "Have a replacement-contractor tender ready to issue if distress signals escalate.", owner: "P. Evans", due: "2026-08-01", status: "Not Started" },
+    ],
     desc: "MEP subcontractor showing financial distress signals.",
     mit: "Credit monitoring in place; contingency tender prepared.",
     comments: "",
@@ -259,9 +288,13 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R011", scope: "Program", title: "Fuel & energy price volatility",
     category: "Supply Chain", workstream: null, owner: "I. Gardiner", l: 4, i: 4,
-    tl: 3, ti: 3, proximity: "Beyond 12 months", schedDays: 60,
+    tl: 3, ti: 3, proximity: "Beyond 12 months", schedDays: 60, responseStrategy: "Transfer",
     status: "Open", target: "2027-03-31", review: "2026-05-30",
     est: 3_500_000,
+    actions: [
+      { title: "Evaluate energy hedging instruments with commercial", description: "Assess fixed-price and collar hedging options to cap programme energy exposure.", owner: "I. Gardiner", due: "2026-05-31", status: "In Progress" },
+      { title: "Introduce indexed energy clauses into new contracts", description: "Standardise CPI-linked energy indexation across delivery-partner contracts.", owner: "Programme Office", due: "2026-09-30", status: "Not Started" },
+    ],
     desc: "Sustained energy price increases across the capital programme.",
     mit: "Hedging strategy and indexed contracts under review with commercial.",
     comments: "",
@@ -270,7 +303,7 @@ const riskSeed: RiskSeed[] = [
   {
     ref: "R012", scope: "Program", title: "Construction cost inflation",
     category: "Economic", workstream: null, owner: "I. Gardiner", l: 5, i: 3,
-    tl: 3, ti: 2, proximity: "Beyond 12 months", schedDays: 90,
+    tl: 3, ti: 2, proximity: "Beyond 12 months", schedDays: 90, responseStrategy: "Accept",
     status: "Open", target: "2030-03-31", review: "2026-09-30",
     est: 6_800_000,
     events: [
@@ -323,6 +356,19 @@ const buildEvents = (ref: string, seeds: EventSeed[] = []): RiskEvent[] =>
 const sumEvents = (events: RiskEvent[], type: RiskEventType): number =>
   events.filter((e) => e.type === type).reduce((a, e) => a + e.amount, 0);
 
+const buildActions = (ref: string, seeds: ActionSeed[] = []): RiskAction[] =>
+  seeds.map((a, idx) => ({
+    id: `${ref}-a${idx + 1}`,
+    title: a.title,
+    description: a.description,
+    owner: a.owner,
+    dueDate: a.due,
+    status: a.status,
+    completedDate: a.status === "Complete" ? (a.completed ?? a.due ?? null) : null,
+    createdAt: "2026-02-01T09:00:00Z",
+    updatedAt: a.completed ? `${a.completed}T10:00:00Z` : "2026-06-05T09:41:00Z",
+  }));
+
 export const SEED_RISKS: Risk[] = riskSeed.map((s) => {
   const events = buildEvents(s.ref, s.events);
   return {
@@ -354,6 +400,8 @@ export const SEED_RISKS: Risk[] = riskSeed.map((s) => {
     reducedTotal: sumEvents(events, "Reduced"),
     costProfile: evenProfile(s.est, s.start, s.months),
     events,
+    responseStrategy: s.responseStrategy ?? null,
+    actions: buildActions(s.ref, s.actions),
     mitigation: s.mit,
     comments: s.comments,
     linkedChangeRefs: s.linkedChanges ?? [],

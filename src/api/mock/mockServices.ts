@@ -10,11 +10,20 @@ import type {
   ProjectInput,
   Rating,
   Risk,
+  RiskAction,
+  RiskActionInput,
+  RiskActionStatus,
   RiskEvent,
   RiskEventInput,
   RiskInput,
 } from "../../types/domain";
-import { calcLevel, calcScore, CLOSED_STATUS, RISK_EVENT_TYPES } from "../../types/lookups";
+import {
+  calcLevel,
+  calcScore,
+  CLOSED_STATUS,
+  RISK_ACTION_STATUSES,
+  RISK_EVENT_TYPES,
+} from "../../types/lookups";
 import { isMonthKey, MAX_PROFILE_MONTHS } from "../../utils/calendar";
 import type {
   ChangeService,
@@ -99,6 +108,23 @@ const targetError = (tl: Rating | null, ti: Rating | null): string | null =>
     ? "Set both target likelihood and target impact, or leave both blank"
     : null;
 
+/** Validate a mitigation action payload. Returns an error message or null. */
+const actionError = (input: Partial<RiskActionInput>, requireCore: boolean): string | null => {
+  if (requireCore || input.title !== undefined) {
+    if (!input.title || !input.title.trim()) return "Action title is required";
+  }
+  if (requireCore || input.owner !== undefined) {
+    if (!input.owner || !input.owner.trim()) return "Action owner is required";
+  }
+  if (input.status !== undefined && !RISK_ACTION_STATUSES.includes(input.status)) {
+    return `Unknown action status "${input.status}"`;
+  }
+  if (input.dueDate != null && input.dueDate !== "" && !ISO_DATE.test(input.dueDate)) {
+    return "Action due date must be a valid date (yyyy-mm-dd)";
+  }
+  return null;
+};
+
 /** Recompute the ledger-derived totals so they always agree with `events`. */
 const withTotals = (risk: Risk): Risk => {
   const sum = (type: RiskEvent["type"]) =>
@@ -168,6 +194,7 @@ export function createMockServices(): Services {
         releasedTotal: 0,
         reducedTotal: 0,
         events: [],
+        actions: [],
         archived: false,
         createdAt: nowIso(),
         updatedAt: nowIso(),
@@ -228,6 +255,83 @@ export function createMockServices(): Services {
         status: event.closeRisk ? CLOSED_STATUS : existing.status,
         updatedAt: nowIso(),
       });
+      risks = risks.map((r) => (r.riskReference === ref ? merged : r));
+      return delay(clone(merged));
+    },
+    addAction: (ref, input: RiskActionInput) => {
+      const existing = risks.find((r) => r.riskReference === ref);
+      if (!existing) return Promise.reject(new Error(`Risk ${ref} not found`));
+      const invalid = actionError(input, true);
+      if (invalid) return Promise.reject(new Error(invalid));
+      const seq =
+        existing.actions.reduce((max, a) => {
+          const n = parseInt(a.id.replace(/^.*-a/, ""), 10);
+          return Number.isNaN(n) ? max : Math.max(max, n);
+        }, 0) + 1;
+      const status: RiskActionStatus = input.status;
+      const now = nowIso();
+      const action: RiskAction = {
+        id: `${ref}-a${seq}`,
+        title: input.title.trim(),
+        description: input.description.trim(),
+        owner: input.owner.trim(),
+        dueDate: input.dueDate || null,
+        status,
+        completedDate: status === "Complete" ? now.slice(0, 10) : null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const merged: Risk = {
+        ...existing,
+        actions: [...existing.actions, action],
+        updatedAt: now,
+      };
+      risks = risks.map((r) => (r.riskReference === ref ? merged : r));
+      return delay(clone(merged));
+    },
+    updateAction: (ref, actionId, patch: Partial<RiskActionInput>) => {
+      const existing = risks.find((r) => r.riskReference === ref);
+      if (!existing) return Promise.reject(new Error(`Risk ${ref} not found`));
+      const current = existing.actions.find((a) => a.id === actionId);
+      if (!current) return Promise.reject(new Error(`Action ${actionId} not found`));
+      const invalid = actionError(patch, false);
+      if (invalid) return Promise.reject(new Error(invalid));
+      const now = nowIso();
+      const nextStatus = patch.status ?? current.status;
+      // Stamp completedDate when transitioning into Complete; clear it when moving out.
+      const completedDate =
+        nextStatus === "Complete"
+          ? current.completedDate ?? now.slice(0, 10)
+          : null;
+      const updated: RiskAction = {
+        ...current,
+        ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+        ...(patch.description !== undefined ? { description: patch.description.trim() } : {}),
+        ...(patch.owner !== undefined ? { owner: patch.owner.trim() } : {}),
+        ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate || null } : {}),
+        status: nextStatus,
+        completedDate,
+        updatedAt: now,
+      };
+      const merged: Risk = {
+        ...existing,
+        actions: existing.actions.map((a) => (a.id === actionId ? updated : a)),
+        updatedAt: now,
+      };
+      risks = risks.map((r) => (r.riskReference === ref ? merged : r));
+      return delay(clone(merged));
+    },
+    deleteAction: (ref, actionId) => {
+      const existing = risks.find((r) => r.riskReference === ref);
+      if (!existing) return Promise.reject(new Error(`Risk ${ref} not found`));
+      if (!existing.actions.some((a) => a.id === actionId)) {
+        return Promise.reject(new Error(`Action ${actionId} not found`));
+      }
+      const merged: Risk = {
+        ...existing,
+        actions: existing.actions.filter((a) => a.id !== actionId),
+        updatedAt: nowIso(),
+      };
       risks = risks.map((r) => (r.riskReference === ref ? merged : r));
       return delay(clone(merged));
     },

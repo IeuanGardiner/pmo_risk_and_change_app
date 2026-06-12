@@ -30,6 +30,12 @@ environment variable.
   Every event is dated and recorded in the risk's **change log**, and the
   realised / released / reduced totals (and the live open exposure) derive from
   the ledger — so charts and reports reflect what actually happened, when
+- **Response strategy & mitigation action plan** — tag each risk with a
+  treatment strategy (Avoid / Reduce / Transfer / Accept / Share) and break it
+  into trackable actions with an owner, due date and status. The detail page
+  shows a "X of Y complete" progress header, inline status changes, and add /
+  edit / delete; overdue open actions surface in the dashboard's Attention Needed
+  panel and in the register export
 - Risk detail — severity banner, full attributes, mitigation, next review date,
   linked change requests, cost-position cards, exposure-vs-forecast drawdown
   chart, change log, Log Update / Close / Archive / Restore actions
@@ -132,6 +138,9 @@ All payload shapes are the TypeScript interfaces in `src/types/domain.ts` and
 | POST | `/api/risks` | `RiskInput` | `Risk` (server assigns reference, score, level, target score/level, timestamps) |
 | PATCH | `/api/risks/:ref` | `Partial<RiskInput>` | `Risk` |
 | POST | `/api/risks/:ref/events` | `RiskEventInput` | `Risk` (appends a ledger event, recomputes derived totals, optionally closes) |
+| POST | `/api/risks/:ref/actions` | `RiskActionInput` | `Risk` (appends a mitigation action; server assigns id + timestamps) |
+| PATCH | `/api/risks/:ref/actions/:actionId` | `Partial<RiskActionInput>` | `Risk` (updates an action; stamps/clears `completedDate`) |
+| DELETE | `/api/risks/:ref/actions/:actionId` | — | `Risk` (removes the action, returns the updated risk) |
 | POST | `/api/risks/:ref/close` | — | `Risk` |
 | POST | `/api/risks/:ref/archive` | — | `Risk` |
 | POST | `/api/risks/:ref/restore` | — | `Risk` |
@@ -191,6 +200,17 @@ in `src/api/mock/mockServices.ts`):
   an entry, recomputes these totals, and sets `status = "Closed"` when the event
   has `closeRisk: true`. The ledger is the source of truth — these totals are
   never written directly via create/update
+- A risk carries a `responseStrategy` (`Avoid`/`Reduce`/`Transfer`/`Accept`/
+  `Share`, or `null`) — a plain field on `RiskInput`, set via create/update — and
+  a structured `actions` plan managed through the actions sub-resource. `actions`
+  is **server-owned** and excluded from `RiskInput`: it is only ever mutated via
+  `POST`/`PATCH`/`DELETE /api/risks/:ref/actions[/:actionId]`, each of which
+  returns the **full updated `Risk`**. The server assigns each action `id`
+  (e.g. `R001-a1`) and stamps `createdAt`/`updatedAt`; `RiskActionInput` carries
+  `title` (required), `description`, `owner` (required), `dueDate` and `status`
+  (`Not Started`/`In Progress`/`Complete`/`Cancelled`). `completedDate` is
+  derived — stamped when an action enters `Complete` and cleared when it leaves.
+  All three action endpoints require `risks:update`
 - `AppConfig.riskStatuses` is client-configurable; "Open" and "Closed" must
   always be present (the server sanitises the list to guarantee this)
 - Reference generation (`R###` / `C###`)

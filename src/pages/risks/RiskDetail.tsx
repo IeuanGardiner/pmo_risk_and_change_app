@@ -1,23 +1,25 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  Archive, ArchiveRestore, ArrowLeft, CheckCircle2, Pencil, Plus,
+  Archive, ArchiveRestore, ArrowLeft, CheckCircle2, Pencil, Plus, Trash2,
 } from "lucide-react";
 import {
   CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { useAuth } from "../../auth/AuthContext";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { Modal } from "../../components/Modal";
 import {
-  Btn, Card, ChangeStatusPill, EmptyState, PageHeader, Pill, RiskStatusText, SectionTitle,
+  Btn, Card, ChangeStatusPill, EmptyState, Field, Grid2, Input, PageHeader, Pill, RiskStatusText,
+  SectionTitle, Select, TextArea,
 } from "../../components/ui";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { useTheme } from "../../theme/ThemeProvider";
-import { LEVEL_STYLES, RISK_EVENT_STYLES, T } from "../../theme/tokens";
-import type { RiskEvent } from "../../types/domain";
-import { IMPACTS, isClosed, LIKELIHOODS } from "../../types/lookups";
+import { alpha, LEVEL_STYLES, RISK_EVENT_STYLES, T } from "../../theme/tokens";
+import type { Risk, RiskAction, RiskActionInput, RiskActionStatus, RiskEvent } from "../../types/domain";
+import { IMPACTS, isClosed, LIKELIHOODS, RISK_ACTION_STATUSES } from "../../types/lookups";
 import { profileRangeLabel } from "../../utils/calendar";
 import { riskDrawdown } from "../../utils/chartData";
 import {
@@ -28,7 +30,10 @@ import { RiskUpdateDialog } from "./RiskUpdateDialog";
 export function RiskDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
-  const { risks, changes, projects, closeRisk, archiveRisk, restoreRisk } = useAppData();
+  const {
+    risks, changes, projects, closeRisk, archiveRisk, restoreRisk,
+    addRiskAction, updateRiskAction, deleteRiskAction,
+  } = useAppData();
   const chartColors = useTheme().chartColors;
   const { can } = useAuth();
   const toast = useToast();
@@ -95,6 +100,7 @@ export function RiskDetail() {
       : []),
     ["Proximity", risk.proximity ?? "—"],
     ["Schedule Impact", scheduleDays(risk.scheduleImpactDays)],
+    ["Response Strategy", risk.responseStrategy ?? "—"],
     ["Status", risk.status],
     [
       "Project",
@@ -400,14 +406,357 @@ export function RiskDetail() {
         </ResponsiveContainer>
       </Card>
 
+      {/* Mitigation action plan */}
+      <ActionPlan
+        risk={risk}
+        canManage={!risk.archived && !closed && can("risks:update")}
+        onAdd={addRiskAction}
+        onUpdate={updateRiskAction}
+        onDelete={deleteRiskAction}
+      />
+
       {/* Risk change log */}
-      <Card style={{ padding: 18 }}>
+      <Card style={{ padding: 18, marginTop: 16 }}>
         <SectionTitle sub="Realised, released and reduced updates recorded against this risk">
           Risk Change Log {risk.events.length > 0 && `(${risk.events.length})`}
         </SectionTitle>
         <ChangeLog events={risk.events} createdAt={risk.createdAt} estimated={risk.estimatedTotal} />
       </Card>
     </div>
+  );
+}
+
+/* ---- Mitigation action plan --------------------------------------------- */
+
+const ACTION_STATUS_STYLE: Record<RiskActionStatus, { c: string; bg: string }> = {
+  "Not Started": { c: T.textSec, bg: T.bg },
+  "In Progress": { c: T.brand, bg: T.brandBg },
+  Complete: { c: T.low, bg: alpha(T.low, 12) },
+  Cancelled: { c: T.textTer, bg: T.bg },
+};
+
+const emptyAction: RiskActionInput = {
+  title: "",
+  description: "",
+  owner: "",
+  dueDate: null,
+  status: "Not Started",
+};
+
+function ActionPlan({
+  risk,
+  canManage,
+  onAdd,
+  onUpdate,
+  onDelete,
+}: {
+  risk: Risk;
+  canManage: boolean;
+  onAdd: (ref: string, input: RiskActionInput) => Promise<Risk>;
+  onUpdate: (ref: string, actionId: string, patch: Partial<RiskActionInput>) => Promise<Risk>;
+  onDelete: (ref: string, actionId: string) => Promise<Risk>;
+}) {
+  const toast = useToast();
+  const [editing, setEditing] = useState<RiskAction | "new" | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<RiskAction | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [statusBusy, setStatusBusy] = useState<string | null>(null);
+
+  const actions = risk.actions;
+  const completed = actions.filter((a) => a.status === "Complete").length;
+
+  const onStatusChange = async (a: RiskAction, status: string) => {
+    setStatusBusy(a.id);
+    try {
+      await onUpdate(risk.riskReference, a.id, { status: status as RiskActionStatus });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update the action");
+    } finally {
+      setStatusBusy(null);
+    }
+  };
+
+  const onDeleteConfirmed = async () => {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    try {
+      await onDelete(risk.riskReference, confirmDelete.id);
+      toast.success("Mitigation action removed");
+      setConfirmDelete(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not remove the action");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Card style={{ padding: 18, marginTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+        <SectionTitle
+          sub={
+            actions.length
+              ? `${completed} of ${actions.length} complete`
+              : "Break the response strategy into trackable actions"
+          }
+        >
+          Mitigation Actions
+        </SectionTitle>
+        {canManage && (
+          <Btn
+            variant="default"
+            icon={Plus}
+            onClick={() => setEditing("new")}
+            style={{ padding: "6px 12px", fontSize: 12.5 }}
+          >
+            Add Action
+          </Btn>
+        )}
+      </div>
+
+      {actions.length === 0 ? (
+        <div style={{ fontSize: 13, color: T.textTer, marginTop: 4 }}>
+          No mitigation actions recorded yet.
+        </div>
+      ) : (
+        actions.map((a) => {
+          const st = ACTION_STATUS_STYLE[a.status];
+          const overdue =
+            a.status !== "Complete" && a.status !== "Cancelled" && isOverdue(a.dueDate);
+          return (
+            <div
+              key={a.id}
+              style={{
+                display: "flex",
+                gap: 12,
+                padding: "12px 0",
+                borderTop: `1px solid ${T.strokeSubtle}`,
+                fontSize: 13,
+                alignItems: "flex-start",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, color: T.text }}>{a.title}</div>
+                {a.description && (
+                  <div style={{ fontSize: 12.5, color: T.textSec, marginTop: 3, lineHeight: 1.5 }}>
+                    {a.description}
+                  </div>
+                )}
+                <div style={{ fontSize: 11.5, color: T.textTer, marginTop: 4, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <span>Owner: {a.owner}</span>
+                  {a.dueDate && (
+                    <span style={{ color: overdue ? T.critical : T.textTer, fontWeight: overdue ? 700 : 400 }}>
+                      Due {formatDate(a.dueDate)}{overdue ? " — overdue" : ""}
+                    </span>
+                  )}
+                  {a.status === "Complete" && a.completedDate && (
+                    <span style={{ color: T.low }}>Completed {formatDate(a.completedDate)}</span>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                {canManage ? (
+                  <div style={{ width: 138 }}>
+                    <Select
+                      value={a.status}
+                      onChange={(v) => void onStatusChange(a, v)}
+                      options={RISK_ACTION_STATUSES}
+                      disabled={statusBusy === a.id}
+                    />
+                  </div>
+                ) : (
+                  <span
+                    style={{
+                      color: st.c,
+                      background: st.bg,
+                      border: `1px solid ${alpha(st.c, 34)}`,
+                      borderRadius: 4,
+                      padding: "2px 9px",
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {a.status}
+                  </span>
+                )}
+                {canManage && (
+                  <>
+                    <button
+                      onClick={() => setEditing(a)}
+                      aria-label="Edit action"
+                      title="Edit action"
+                      style={iconBtnStyle}
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(a)}
+                      aria-label="Delete action"
+                      title="Delete action"
+                      style={{ ...iconBtnStyle, color: T.critical }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })
+      )}
+
+      <ActionModal
+        open={editing !== null}
+        action={editing === "new" ? null : editing}
+        onClose={() => setEditing(null)}
+        onSubmit={async (input) => {
+          if (editing === "new") {
+            await onAdd(risk.riskReference, input);
+            toast.success("Mitigation action added");
+          } else if (editing) {
+            await onUpdate(risk.riskReference, editing.id, input);
+            toast.success("Mitigation action updated");
+          }
+          setEditing(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Remove mitigation action?"
+        message={`"${confirmDelete?.title ?? ""}" will be removed from the action plan. This cannot be undone.`}
+        confirmLabel="Remove Action"
+        busy={deleting}
+        onConfirm={() => void onDeleteConfirmed()}
+        onCancel={() => setConfirmDelete(null)}
+      />
+    </Card>
+  );
+}
+
+const iconBtnStyle: React.CSSProperties = {
+  background: "none",
+  border: `1px solid ${T.stroke}`,
+  borderRadius: 4,
+  cursor: "pointer",
+  color: T.textSec,
+  padding: 5,
+  display: "grid",
+  placeItems: "center",
+};
+
+function ActionModal({
+  open,
+  action,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  action: RiskAction | null;
+  onClose: () => void;
+  onSubmit: (input: RiskActionInput) => Promise<void>;
+}) {
+  const toast = useToast();
+  const [f, setF] = useState<RiskActionInput>(emptyAction);
+  const [saving, setSaving] = useState(false);
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+
+  // Reseed the form whenever the modal opens for a different action.
+  const key = action ? action.id : "new";
+  if (open && seededFor !== key) {
+    setF(
+      action
+        ? {
+            title: action.title,
+            description: action.description,
+            owner: action.owner,
+            dueDate: action.dueDate,
+            status: action.status,
+          }
+        : emptyAction,
+    );
+    setSeededFor(key);
+  }
+  if (!open && seededFor !== null) setSeededFor(null);
+
+  const set = <K extends keyof RiskActionInput>(k: K, v: RiskActionInput[K]) =>
+    setF((p) => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    if (!f.title.trim()) {
+      toast.error("Enter an action title");
+      return;
+    }
+    if (!f.owner.trim()) {
+      toast.error("Enter an action owner");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSubmit({
+        title: f.title.trim(),
+        description: f.description.trim(),
+        owner: f.owner.trim(),
+        dueDate: f.dueDate || null,
+        status: f.status,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Saving the action failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal open={open} title={action ? "Edit Mitigation Action" : "Add Mitigation Action"} width={520} onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <Field label="Action Title" required>
+          <Input
+            placeholder="What needs to be done…"
+            value={f.title}
+            onChange={(e) => set("title", e.target.value)}
+          />
+        </Field>
+        <Field label="Description">
+          <TextArea
+            placeholder="Detail the action, deliverable or control…"
+            value={f.description}
+            onChange={(e) => set("description", e.target.value)}
+          />
+        </Field>
+        <Grid2>
+          <Field label="Owner" required>
+            <Input
+              placeholder="Assign to…"
+              value={f.owner}
+              onChange={(e) => set("owner", e.target.value)}
+            />
+          </Field>
+          <Field label="Due Date">
+            <Input
+              type="date"
+              value={f.dueDate ?? ""}
+              onChange={(e) => set("dueDate", e.target.value || null)}
+            />
+          </Field>
+          <Field label="Status" required>
+            <Select
+              value={f.status}
+              onChange={(v) => set("status", v as RiskActionStatus)}
+              options={RISK_ACTION_STATUSES}
+            />
+          </Field>
+        </Grid2>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+          <Btn variant="default" onClick={onClose}>
+            Cancel
+          </Btn>
+          <Btn variant="primary" onClick={() => void save()} loading={saving}>
+            {action ? "Save Action" : "Add Action"}
+          </Btn>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

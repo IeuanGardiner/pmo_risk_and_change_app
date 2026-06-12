@@ -73,6 +73,12 @@ export function RiskDashboard() {
           const reasons: string[] = [];
           if (isOverdue(r.nextReviewDate)) reasons.push("Review overdue");
           if (isOverdue(r.targetDate)) reasons.push("Target date passed");
+          const overdueActions = r.actions.filter(
+            (a) => a.status !== "Complete" && a.status !== "Cancelled" && isOverdue(a.dueDate),
+          ).length;
+          if (overdueActions > 0) {
+            reasons.push(`${overdueActions} action${overdueActions === 1 ? "" : "s"} overdue`);
+          }
           return reasons.length ? { risk: r, reasons } : null;
         })
         .filter((x): x is { risk: Risk; reasons: string[] } => x !== null)
@@ -195,7 +201,7 @@ export function RiskDashboard() {
 
       {/* Attention needed */}
       <Card style={{ padding: 18, marginBottom: 18 }}>
-        <SectionTitle sub="Open risks with an overdue review or a passed target date">
+        <SectionTitle sub="Open risks with an overdue review, a passed target date or overdue mitigation actions">
           Attention Needed {attention.length > 0 && `(${attention.length})`}
         </SectionTitle>
         {attention.length === 0 ? (

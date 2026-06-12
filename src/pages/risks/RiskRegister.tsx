@@ -105,12 +105,15 @@ export function RiskRegister() {
   const exportCsv = () =>
     downloadCsv(
       `risk-register-${scope.toLowerCase()}.csv`,
-      ["Reference", "Title", "Scope", "Category", "Workstream", "Level", "Score", "Likelihood", "Impact", "Target Likelihood", "Target Impact", "Target Score", "Target Level", "Proximity", "Schedule Impact Days", "Owner", "Status", "Target Date", "Next Review", "Project", "Profile Start", "Profile Months", "Estimated", "Realised", "Released", "Reduced", "Open Exposure", "Archived"],
+      ["Reference", "Title", "Scope", "Category", "Workstream", "Level", "Score", "Likelihood", "Impact", "Target Likelihood", "Target Impact", "Target Score", "Target Level", "Proximity", "Schedule Impact Days", "Response Strategy", "Open Actions", "Overdue Actions", "Owner", "Status", "Target Date", "Next Review", "Project", "Profile Start", "Profile Months", "Estimated", "Realised", "Released", "Reduced", "Open Exposure", "Archived"],
       sorted.map((r) => [
         r.riskReference, r.title, r.scope, r.category, r.workstream ?? "", r.level, r.score,
         LIKELIHOODS[r.likelihood], IMPACTS[r.impact],
         r.targetLikelihood ?? "", r.targetImpact ?? "", r.targetScore ?? "", r.targetLevel ?? "",
         r.proximity ?? "", r.scheduleImpactDays,
+        r.responseStrategy ?? "",
+        r.actions.filter((a) => a.status !== "Complete" && a.status !== "Cancelled").length,
+        r.actions.filter((a) => a.status !== "Complete" && a.status !== "Cancelled" && isOverdue(a.dueDate)).length,
         r.owner, r.status, r.targetDate ?? "",
         r.nextReviewDate ?? "",
         scope === "Project" ? projectName(r.projectId) : "",

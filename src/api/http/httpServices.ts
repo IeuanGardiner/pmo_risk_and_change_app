@@ -45,6 +45,21 @@ export function createHttpServices(baseUrl: string): Services {
         method: "POST",
         body: JSON.stringify(event),
       }),
+    addAction: (ref, input) =>
+      api<Risk>(`/api/risks/${encodeURIComponent(ref)}/actions`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    updateAction: (ref, actionId, patch) =>
+      api<Risk>(
+        `/api/risks/${encodeURIComponent(ref)}/actions/${encodeURIComponent(actionId)}`,
+        { method: "PATCH", body: JSON.stringify(patch) },
+      ),
+    deleteAction: (ref, actionId) =>
+      api<Risk>(
+        `/api/risks/${encodeURIComponent(ref)}/actions/${encodeURIComponent(actionId)}`,
+        { method: "DELETE" },
+      ),
     close: (ref) => api<Risk>(`/api/risks/${encodeURIComponent(ref)}/close`, { method: "POST" }),
     archive: (ref) =>
       api<Risk>(`/api/risks/${encodeURIComponent(ref)}/archive`, { method: "POST" }),

@@ -2,9 +2,11 @@ import type {
   ChangePriority,
   ChangeStatus,
   Rating,
+  RiskActionStatus,
   RiskEventType,
   RiskLevel,
   RiskProximity,
+  RiskResponseStrategy,
 } from "./domain";
 import type { MatrixGrid } from "./config";
 
@@ -56,6 +58,30 @@ export const RISK_EVENT_LABELS: Record<RiskEventType, string> = {
   Released: "Released — value handed back",
   Reduced: "Reduced — estimate revised down",
 };
+
+/* ---- Response strategies & action statuses ------------------------------- */
+export const RISK_RESPONSE_STRATEGIES: RiskResponseStrategy[] = [
+  "Avoid",
+  "Reduce",
+  "Transfer",
+  "Accept",
+  "Share",
+];
+
+export const RESPONSE_STRATEGY_HELP: Record<RiskResponseStrategy, string> = {
+  Avoid: "Eliminate the risk by changing scope, approach or conditions",
+  Reduce: "Lower the likelihood or impact through controls and mitigation actions",
+  Transfer: "Shift the financial or contractual exposure to another party (e.g. insurance, warranty)",
+  Accept: "Acknowledge the risk and carry the exposure — record the rationale",
+  Share: "Distribute the risk with another party under a shared-risk arrangement",
+};
+
+export const RISK_ACTION_STATUSES: RiskActionStatus[] = [
+  "Not Started",
+  "In Progress",
+  "Complete",
+  "Cancelled",
+];
 
 /* ---- Change lookups ------------------------------------------------------ */
 export const CHANGE_PRIORITIES: ChangePriority[] = ["Urgent", "High", "Standard", "Low"];

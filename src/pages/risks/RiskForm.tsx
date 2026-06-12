@@ -9,14 +9,23 @@ import { usePageTitle } from "../../hooks/usePageTitle";
 import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { LEVEL_STYLES, T } from "../../theme/tokens";
-import type { CostProfile, Rating, RiskInput, RiskProximity, Scope } from "../../types/domain";
+import type {
+  CostProfile,
+  Rating,
+  RiskInput,
+  RiskProximity,
+  RiskResponseStrategy,
+  Scope,
+} from "../../types/domain";
 import {
   calcLevel,
   calcScore,
   IMPACTS,
   LIKELIHOODS,
   OPEN_STATUS,
+  RESPONSE_STRATEGY_HELP,
   RISK_PROXIMITIES,
+  RISK_RESPONSE_STRATEGIES,
 } from "../../types/lookups";
 import { currentMonthKey, evenProfile } from "../../utils/calendar";
 import { currencySymbol, parseNum } from "../../utils/format";
@@ -34,6 +43,7 @@ interface FormState {
   targetImpact: string;
   proximity: string;
   scheduleImpactDays: string;
+  responseStrategy: string;
   status: string;
   targetDate: string;
   nextReviewDate: string;
@@ -57,6 +67,7 @@ const emptyForm = (defaultProjectId: string): FormState => ({
   targetImpact: "",
   proximity: "",
   scheduleImpactDays: "",
+  responseStrategy: "",
   status: OPEN_STATUS,
   targetDate: "",
   nextReviewDate: "",
@@ -117,6 +128,7 @@ function toInput(f: FormState): RiskInput {
     targetImpact: f.targetImpact ? (+f.targetImpact as Rating) : null,
     proximity: (f.proximity || null) as RiskProximity | null,
     scheduleImpactDays: parseNum(f.scheduleImpactDays),
+    responseStrategy: (f.responseStrategy || null) as RiskResponseStrategy | null,
     status: f.status,
     targetDate: f.targetDate || null,
     nextReviewDate: f.nextReviewDate || null,
@@ -181,6 +193,30 @@ function TargetLevelRow({
         </div>
       )}
     </>
+  );
+}
+
+/** Response-strategy picker with contextual help for the selected treatment. */
+function ResponseStrategyField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const help = value ? RESPONSE_STRATEGY_HELP[value as RiskResponseStrategy] : null;
+  return (
+    <Field label="Response Strategy">
+      <Select
+        value={value}
+        onChange={onChange}
+        options={RISK_RESPONSE_STRATEGIES}
+        placeholder="Select a treatment strategy…"
+      />
+      <div style={{ fontSize: 11.5, color: T.textTer, marginTop: 6, lineHeight: 1.5 }}>
+        {help ?? "How the risk will be treated — drives the mitigation action plan."}
+      </div>
+    </Field>
   );
 }
 
@@ -414,6 +450,12 @@ export function AddRisk() {
 
             <Divider />
             <SubHead>Mitigation &amp; Response</SubHead>
+            <div style={{ maxWidth: 440, marginBottom: 14 }}>
+              <ResponseStrategyField
+                value={f.responseStrategy}
+                onChange={(v) => set("responseStrategy", v)}
+              />
+            </div>
             <TextArea
               style={{ minHeight: 80 }}
               placeholder="Mitigation plan…"
@@ -529,6 +571,7 @@ export function EditRisk() {
           targetImpact: risk.targetImpact != null ? String(risk.targetImpact) : "",
           proximity: risk.proximity ?? "",
           scheduleImpactDays: risk.scheduleImpactDays ? String(risk.scheduleImpactDays) : "",
+          responseStrategy: risk.responseStrategy ?? "",
           status: risk.status,
           targetDate: risk.targetDate ?? "",
           nextReviewDate: risk.nextReviewDate ?? "",
@@ -768,6 +811,14 @@ export function EditRisk() {
           </div>
         )}
 
+        <Divider />
+        <SubHead>Mitigation &amp; Response</SubHead>
+        <div style={{ maxWidth: 440 }}>
+          <ResponseStrategyField
+            value={f.responseStrategy}
+            onChange={(v) => set("responseStrategy", v)}
+          />
+        </div>
         <div style={{ marginTop: 14 }}>
           <Field label="Mitigation Plan">
             <TextArea value={f.mitigation} onChange={(e) => set("mitigation", e.target.value)} />

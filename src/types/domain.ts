@@ -22,6 +22,38 @@ export type RiskProximity =
   | "6-12 months"
   | "Beyond 12 months";
 
+/** The treatment strategy chosen for the risk. */
+export type RiskResponseStrategy = "Avoid" | "Reduce" | "Transfer" | "Accept" | "Share";
+
+/** Lifecycle status of an individual mitigation action. */
+export type RiskActionStatus = "Not Started" | "In Progress" | "Complete" | "Cancelled";
+
+/** A discrete action that implements part of the mitigation plan. */
+export interface RiskAction {
+  id: string;
+  title: string;
+  description: string;
+  owner: string;
+  /** ISO date yyyy-mm-dd or null. */
+  dueDate: string | null;
+  status: RiskActionStatus;
+  /** ISO date yyyy-mm-dd — stamped by the server when status becomes "Complete". */
+  completedDate: string | null;
+  /** ISO datetime, server-owned. */
+  createdAt: string;
+  /** ISO datetime, server-owned. */
+  updatedAt: string;
+}
+
+/** Payload for creating/updating an action (server stamps id/timestamps/completedDate). */
+export interface RiskActionInput {
+  title: string;
+  description: string;
+  owner: string;
+  dueDate: string | null;
+  status: RiskActionStatus;
+}
+
 export type DistributionMethod = "Even" | "Custom";
 
 /** Calendar-anchored cost spread: one entry per month from `startMonth`. */
@@ -111,6 +143,10 @@ export interface Risk {
   costProfile: CostProfile;
   /** Update / draw-down ledger — appended via the risk event endpoint. */
   events: RiskEvent[];
+  /** The chosen treatment strategy for this risk. */
+  responseStrategy: RiskResponseStrategy | null;
+  /** Structured mitigation actions — managed via the actions sub-resource. */
+  actions: RiskAction[];
   mitigation: string;
   comments: string;
   linkedChangeRefs: string[];
@@ -134,6 +170,7 @@ export type RiskInput = Omit<
   | "releasedTotal"
   | "reducedTotal"
   | "events"
+  | "actions"
   | "archived"
   | "createdAt"
   | "updatedAt"
