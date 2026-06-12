@@ -144,6 +144,17 @@ function toInput(f: FormState): RiskInput {
   };
 }
 
+/** Step-1 / info-fields validation for per-field onBlur errors. */
+function validateInfo(f: FormState): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!f.title.trim()) errors.title = "Risk title is required";
+  if (!f.owner.trim()) errors.owner = "Risk owner is required";
+  if (!f.category) errors.category = "Category is required";
+  if (!f.likelihood) errors.likelihood = "Likelihood is required";
+  if (!f.impact) errors.impact = "Impact is required";
+  return errors;
+}
+
 /** Value-step validation, shared by the add wizard (step 2) and edit form. */
 function validateValues(f: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -232,7 +243,11 @@ export function AddRisk() {
   const [step, setStep] = useState<1 | 2>(1);
   const [saving, setSaving] = useState(false);
   const [attempted, setAttempted] = useState(false);
+  const [touched, setTouched] = useState<Set<string>>(new Set());
   const [f, setF] = useState<FormState>(() => emptyForm(pickerProjects[0]?.id ?? ""));
+
+  const touch = (field: string) =>
+    setTouched((prev) => new Set(prev).add(field));
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setF((p) => ({ ...p, [k]: v }));
@@ -259,7 +274,9 @@ export function AddRisk() {
     f.likelihood &&
     f.impact &&
     !targetPairError(f);
+  const infoErrors = validateInfo(f);
   const errors = attempted ? validateValues(f) : {};
+  const infoErr = (k: string) => (touched.has(k) ? infoErrors[k] : undefined);
 
   const save = async () => {
     const issues = validateValues(f);
@@ -317,11 +334,12 @@ export function AddRisk() {
 
             <SubHead>Risk Information</SubHead>
             <Grid2>
-              <Field label="Risk Title" required>
+              <Field label="Risk Title" required error={infoErr("title")}>
                 <Input
                   placeholder="Enter a concise risk title…"
                   value={f.title}
                   onChange={(e) => set("title", e.target.value)}
+                  onBlur={() => touch("title")}
                 />
               </Field>
               <Field label="Risk Reference">
@@ -341,19 +359,21 @@ export function AddRisk() {
             <Divider />
             <SubHead>Risk Classification</SubHead>
             <Grid2>
-              <Field label="Category" required>
+              <Field label="Category" required error={infoErr("category")}>
                 <Select
                   value={f.category}
                   onChange={(v) => set("category", v)}
                   options={cats}
                   placeholder="Select category…"
+                  aria-invalid={touched.has("category") && !f.category ? true : undefined}
                 />
               </Field>
-              <Field label="Risk Owner" required>
+              <Field label="Risk Owner" required error={infoErr("owner")}>
                 <Input
                   placeholder="Assign to team member…"
                   value={f.owner}
                   onChange={(e) => set("owner", e.target.value)}
+                  onBlur={() => touch("owner")}
                 />
               </Field>
               {f.scope === "Project" && (
@@ -376,20 +396,24 @@ export function AddRisk() {
                   </Field>
                 </>
               )}
-              <Field label="Likelihood" required>
+              <Field label="Likelihood" required error={infoErr("likelihood")}>
                 <Select
                   value={f.likelihood}
                   onChange={(v) => set("likelihood", v)}
+                  onBlur={() => touch("likelihood")}
                   options={RATING_OPTIONS(LIKELIHOODS)}
                   placeholder="Select likelihood…"
+                  aria-invalid={touched.has("likelihood") && !f.likelihood ? true : undefined}
                 />
               </Field>
-              <Field label="Impact" required>
+              <Field label="Impact" required error={infoErr("impact")}>
                 <Select
                   value={f.impact}
                   onChange={(v) => set("impact", v)}
+                  onBlur={() => touch("impact")}
                   options={RATING_OPTIONS(IMPACTS)}
                   placeholder="Select impact…"
+                  aria-invalid={touched.has("impact") && !f.impact ? true : undefined}
                 />
               </Field>
               <Field label="Target Likelihood (post-mitigation)">
@@ -557,6 +581,7 @@ export function EditRisk() {
 
   const [saving, setSaving] = useState(false);
   const [attempted, setAttempted] = useState(false);
+  const [touched, setTouched] = useState<Set<string>>(new Set());
   const [f, setF] = useState<FormState | null>(() =>
     risk
       ? {
@@ -609,6 +634,9 @@ export function EditRisk() {
     f.category,
   );
   const errors = attempted ? validateValues(f) : {};
+  const touch = (k: string) => setTouched((prev) => new Set([...prev, k]));
+  const infoErrors = validateInfo(f);
+  const infoErr = (k: string) => (attempted || touched.has(k) ? infoErrors[k] : undefined);
 
   const save = async () => {
     const targetErr = targetPairError(f);
@@ -654,8 +682,8 @@ export function EditRisk() {
       <Card style={{ padding: 26, maxWidth: 920 }}>
         <SubHead>Risk Information</SubHead>
         <Grid2>
-          <Field label="Risk Title" required>
-            <Input value={f.title} onChange={(e) => set("title", e.target.value)} />
+          <Field label="Risk Title" required error={infoErr("title")}>
+            <Input value={f.title} onChange={(e) => set("title", e.target.value)} onBlur={() => touch("title")} />
           </Field>
           <Field label="Risk Reference">
             <Input disabled value={risk.riskReference} />
@@ -670,11 +698,17 @@ export function EditRisk() {
         <Divider />
         <SubHead>Risk Classification</SubHead>
         <Grid2>
-          <Field label="Category" required>
-            <Select value={f.category} onChange={(v) => set("category", v)} options={cats} />
+          <Field label="Category" required error={infoErr("category")}>
+            <Select
+              value={f.category}
+              onChange={(v) => set("category", v)}
+              onBlur={() => touch("category")}
+              options={cats}
+              aria-invalid={touched.has("category") && !f.category ? true : undefined}
+            />
           </Field>
-          <Field label="Risk Owner" required>
-            <Input value={f.owner} onChange={(e) => set("owner", e.target.value)} />
+          <Field label="Risk Owner" required error={infoErr("owner")}>
+            <Input value={f.owner} onChange={(e) => set("owner", e.target.value)} onBlur={() => touch("owner")} />
           </Field>
           {f.scope === "Project" && (
             <>
@@ -696,18 +730,22 @@ export function EditRisk() {
               </Field>
             </>
           )}
-          <Field label="Likelihood" required>
+          <Field label="Likelihood" required error={infoErr("likelihood")}>
             <Select
               value={f.likelihood}
               onChange={(v) => set("likelihood", v)}
+              onBlur={() => touch("likelihood")}
               options={RATING_OPTIONS(LIKELIHOODS)}
+              aria-invalid={touched.has("likelihood") && !f.likelihood ? true : undefined}
             />
           </Field>
-          <Field label="Impact" required>
+          <Field label="Impact" required error={infoErr("impact")}>
             <Select
               value={f.impact}
               onChange={(v) => set("impact", v)}
+              onBlur={() => touch("impact")}
               options={RATING_OPTIONS(IMPACTS)}
+              aria-invalid={touched.has("impact") && !f.impact ? true : undefined}
             />
           </Field>
           <Field label="Target Likelihood (post-mitigation)">

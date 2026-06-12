@@ -430,13 +430,16 @@ export function RiskDetail() {
 
 /* Newest-first review timeline, showing the score movement of each review. */
 function ReviewHistory({ reviews, matrix }: { reviews: RiskReview[]; matrix: MatrixGrid }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (reviews.length === 0) {
     return <div style={{ fontSize: 13, color: T.textTer }}>No reviews logged yet.</div>;
   }
   const ordered = [...reviews].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const visible = expanded ? ordered : ordered.slice(0, 3);
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      {ordered.map((r) => {
+      {visible.map((r) => {
         const prevScore = calcScore(r.previousLikelihood, r.previousImpact);
         const prevLevel = calcLevel(matrix, r.previousLikelihood, r.previousImpact);
         const newScore = calcScore(r.likelihood, r.impact);
@@ -488,6 +491,13 @@ function ReviewHistory({ reviews, matrix }: { reviews: RiskReview[]; matrix: Mat
           </div>
         );
       })}
+      {ordered.length > 3 && (
+        <div style={{ marginTop: 8 }}>
+          <Btn variant="subtle" onClick={() => setExpanded((e) => !e)} style={{ fontSize: 12 }}>
+            {expanded ? "Collapse" : `Show ${ordered.length - 3} older`}
+          </Btn>
+        </div>
+      )}
     </div>
   );
 }
@@ -502,10 +512,12 @@ function ChangeLog({
   createdAt: string;
   estimated: number;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const ordered = [...events].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const visible = expanded ? ordered : ordered.slice(0, 3);
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      {ordered.map((e) => {
+      {visible.map((e) => {
         const st = RISK_EVENT_STYLES[e.type];
         return (
           <div
@@ -565,6 +577,13 @@ function ChangeLog({
           </div>
         );
       })}
+      {ordered.length > 3 && (
+        <div style={{ marginTop: 8, marginBottom: 4, borderTop: `1px solid ${T.strokeSubtle}`, paddingTop: 8 }}>
+          <Btn variant="subtle" onClick={() => setExpanded((e) => !e)} style={{ fontSize: 12 }}>
+            {expanded ? "Collapse" : `Show ${ordered.length - 3} older`}
+          </Btn>
+        </div>
+      )}
       <div
         style={{
           display: "flex",

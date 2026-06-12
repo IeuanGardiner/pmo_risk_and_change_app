@@ -4,6 +4,7 @@ import { ArrowRight, Download, Plus, X } from "lucide-react";
 import {
   Btn, Card, EmptyState, PageHeader, Pagination, Pill, RiskStatusText, Select, SortableTh,
 } from "../../components/ui";
+import { SkeletonRow } from "../../components/SkeletonRow";
 import { useAuth } from "../../auth/AuthContext";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { useSortPage, type SortState } from "../../hooks/useSortPage";
@@ -27,6 +28,7 @@ const ACCESSORS = {
   target: (r: Risk) => r.targetDate,
   review: (r: Risk) => r.nextReviewDate,
   status: (r: Risk) => r.status,
+  actions: (r: Risk) => r.actions.filter(isOpenAction).length,
 } satisfies Record<string, (r: Risk) => string | number | null>;
 type SortKey = keyof typeof ACCESSORS;
 const INITIAL_SORT: SortState<SortKey> = { key: "score", dir: "desc" };
@@ -37,7 +39,7 @@ const parseRating = (v: string | null): Rating | null => {
 };
 
 export function RiskRegister() {
-  const { risks, activeProjects, config, restoreRisk } = useAppData();
+  const { risks, activeProjects, config, restoreRisk, loading: dataLoading } = useAppData();
   const { can } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
@@ -47,22 +49,58 @@ export function RiskRegister() {
   const matrixL = parseRating(params.get("l"));
   const matrixI = parseRating(params.get("i"));
 
-  // Arriving from a matrix cell: open the scope holding most of that cell's risks.
-  const [scope, setScope] = useState<Scope>(() => {
-    if (matrixL && matrixI) {
-      const inCell = risks.filter(
-        (r) => !r.archived && r.likelihood === matrixL && r.impact === matrixI,
-      );
-      const programCount = inCell.filter((r) => r.scope === "Program").length;
-      if (programCount > inCell.length - programCount) return "Program";
-    }
-    return "Project";
-  });
-  const [level, setLevel] = useState<LevelTab>("All");
-  const [status, setStatus] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [showArchived, setShowArchived] = useState(false);
+  // URL-persisted filter state
+  const scope = (params.get("scope") as Scope) ?? "Project";
+  const level = (params.get("level") as LevelTab) ?? "All";
+  const status = params.get("status") ?? "";
+  const projectId = params.get("project") ?? "";
+  const showArchived = params.get("archived") === "1";
+
+  const setScope = (s: Scope) =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      n.set("scope", s);
+      n.delete("level");
+      n.delete("project");
+      n.delete("l");
+      n.delete("i");
+      return n;
+    });
+
+  const setLevel = (l: LevelTab) =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      if (l === "All") n.delete("level");
+      else n.set("level", l);
+      return n;
+    });
+
+  const setStatus = (s: string) =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      if (!s) n.delete("status");
+      else n.set("status", s);
+      return n;
+    });
+
+  const setProjectId = (id: string) =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      if (!id) n.delete("project");
+      else n.set("project", id);
+      return n;
+    });
+
+  const setShowArchived = (show: boolean) =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      if (!show) n.delete("archived");
+      else n.set("archived", "1");
+      return n;
+    });
+
   const [restoring, setRestoring] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const inScope = useMemo(
     () =>
@@ -102,7 +140,9 @@ export function RiskRegister() {
     }
   };
 
-  const exportCsv = () =>
+  const exportCsv = async () => {
+    setExporting(true);
+    await new Promise((r) => setTimeout(r, 0));
     downloadCsv(
       `risk-register-${scope.toLowerCase()}.csv`,
       ["Reference", "Title", "Scope", "Category", "Workstream", "Level", "Score", "Likelihood", "Impact", "Target Likelihood", "Target Impact", "Target Score", "Target Level", "Proximity", "Response Strategy", "Open Actions", "Overdue Actions", "Schedule Impact Days", "Owner", "Status", "Target Date", "Next Review", "Project", "Profile Start", "Profile Months", "Estimated", "Realised", "Released", "Open Exposure", "Archived"],
@@ -124,6 +164,8 @@ export function RiskRegister() {
         r.archived ? "Yes" : "No",
       ]),
     );
+    setExporting(false);
+  };
 
   const overdueCell = (iso: string | null, closed: boolean) => {
     const overdue = !closed && isOverdue(iso);
@@ -161,7 +203,7 @@ export function RiskRegister() {
         title="Risk Register"
         action={
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn variant="default" icon={Download} onClick={exportCsv}>
+            <Btn variant="default" icon={Download} loading={exporting} onClick={() => void exportCsv()}>
               Export
             </Btn>
             {can("risks:create") && (
@@ -178,11 +220,7 @@ export function RiskRegister() {
         {(["Project", "Program"] as Scope[]).map((s) => (
           <button
             key={s}
-            onClick={() => {
-              setScope(s);
-              setLevel("All");
-              setProjectId("");
-            }}
+            onClick={() => setScope(s)}
             style={{
               padding: "7px 16px",
               borderRadius: 6,
@@ -254,26 +292,49 @@ export function RiskRegister() {
             flexWrap: "wrap",
           }}
         >
-          {TABS.map((t) => (
-            <button
-              key={t}
-              onClick={() => setLevel(t)}
-              style={{
-                padding: "5px 12px",
-                borderRadius: 16,
-                fontSize: 12.5,
-                fontWeight: 600,
-                fontFamily: T.font,
-                border: "none",
-                cursor: "pointer",
-                color: level === t ? "#fff" : T.textSec,
-                background:
-                  level === t ? (t === "All" ? T.brand : LEVEL_STYLES[t].c) : T.bg,
-              }}
-            >
-              {t} ({tabCount(t)})
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const count = tabCount(t);
+            return (
+              <button
+                key={t}
+                onClick={() => setLevel(t)}
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: 16,
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  fontFamily: T.font,
+                  border: "none",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 0,
+                  color: level === t ? "#fff" : T.textSec,
+                  background: level === t ? (t === "All" ? T.brand : LEVEL_STYLES[t].c) : T.bg,
+                }}
+              >
+                {t}
+                <span
+                  style={{
+                    marginLeft: 6,
+                    minWidth: 18,
+                    height: 18,
+                    borderRadius: 9,
+                    background: level === t ? "rgba(255,255,255,0.25)" : T.surface,
+                    color: level === t ? "#fff" : T.textSec,
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "0 5px",
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             {scope === "Project" && (
               <div style={{ width: 200 }}>
@@ -315,6 +376,7 @@ export function RiskRegister() {
               {sortable("target", "Target")}
               {sortable("review", "Review")}
               {sortable("status", "Status")}
+              {sortable("actions", "Actions")}
               {scope === "Project" && (
                 <th style={{ padding: "10px 14px", fontWeight: 600 }}>Project</th>
               )}
@@ -322,97 +384,125 @@ export function RiskRegister() {
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((r) => (
-              <tr
-                key={r.riskReference}
-                className="rs-row"
-                onClick={() => navigate(`/risks/${r.riskReference}`)}
-                style={{
-                  borderTop: `1px solid ${T.strokeSubtle}`,
-                  cursor: "pointer",
-                  opacity: r.archived ? 0.55 : 1,
-                }}
-              >
-                <td style={{ padding: "11px 14px", color: T.textTer, fontWeight: 600 }}>
-                  {r.riskReference}
-                </td>
-                <td style={{ padding: "11px 14px" }}>
-                  <div style={{ fontWeight: 600, color: T.text }}>
-                    {r.title}
-                    {r.archived && (
-                      <span
-                        style={{
-                          marginLeft: 8,
-                          fontSize: 10,
-                          fontWeight: 700,
-                          color: T.textTer,
-                          border: `1px solid ${T.stroke}`,
-                          borderRadius: 3,
-                          padding: "1px 5px",
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        Archived
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 11, color: T.textTer }}>
-                    {r.workstream ?? r.category}
-                  </div>
-                </td>
-                <td style={{ padding: "11px 14px", color: T.textSec }}>{r.category}</td>
-                <td style={{ padding: "11px 14px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                    <Pill level={r.level} small />
-                    <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.3 }}>
-                      <span style={{ fontSize: 11, color: T.textTer }}>
-                        {r.score} ({r.likelihood}×{r.impact})
-                      </span>
-                      {r.targetLevel && (
-                        <span style={{ fontSize: 10.5, color: T.textTer }}>→ {r.targetLevel}</span>
+            {dataLoading
+              ? Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
+              : pageRows.map((r) => {
+                  const openCount = r.actions.filter(isOpenAction).length;
+                  const overdueCount = r.actions.filter((a) => isOpenAction(a) && isOverdue(a.dueDate)).length;
+                  return (
+                    <tr
+                      key={r.riskReference}
+                      className="rs-row"
+                      onClick={() => navigate(`/risks/${r.riskReference}`)}
+                      style={{
+                        borderTop: `1px solid ${T.strokeSubtle}`,
+                        cursor: "pointer",
+                        opacity: r.archived ? 0.55 : 1,
+                      }}
+                    >
+                      <td style={{ padding: "11px 14px", color: T.textTer, fontWeight: 600 }}>
+                        {r.riskReference}
+                      </td>
+                      <td style={{ padding: "11px 14px" }}>
+                        <div style={{ fontWeight: 600, color: T.text }}>
+                          {r.title}
+                          {r.archived && (
+                            <span
+                              style={{
+                                marginLeft: 8,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: T.textTer,
+                                border: `1px solid ${T.stroke}`,
+                                borderRadius: 3,
+                                padding: "1px 5px",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              Archived
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11, color: T.textTer }}>
+                          {r.workstream ?? r.category}
+                        </div>
+                      </td>
+                      <td style={{ padding: "11px 14px", color: T.textSec }}>{r.category}</td>
+                      <td style={{ padding: "11px 14px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                          <Pill level={r.level} small />
+                          <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.3 }}>
+                            <span style={{ fontSize: 11, color: T.textTer }}>
+                              {r.score} ({r.likelihood}×{r.impact})
+                            </span>
+                            {r.targetLevel && (
+                              <span style={{ fontSize: 10.5, color: T.textTer }}>→ {r.targetLevel}</span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: "11px 14px", color: T.textSec }}>{r.owner}</td>
+                      <td style={{ padding: "11px 14px" }}>
+                        {overdueCell(r.targetDate, r.status === "Closed")}
+                      </td>
+                      <td style={{ padding: "11px 14px" }}>
+                        {overdueCell(r.nextReviewDate, r.status === "Closed")}
+                      </td>
+                      <td style={{ padding: "11px 14px" }}>
+                        <RiskStatusText status={r.status} />
+                      </td>
+                      <td style={{ padding: "11px 14px" }}>
+                        {overdueCount > 0 ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <span
+                              style={{
+                                width: 7,
+                                height: 7,
+                                borderRadius: "50%",
+                                background: T.critical,
+                                flexShrink: 0,
+                              }}
+                            />
+                            <span style={{ color: T.critical, fontWeight: 700 }}>
+                              {openCount}/{overdueCount}
+                            </span>
+                          </span>
+                        ) : openCount > 0 ? (
+                          <span style={{ color: T.textSec }}>{openCount}</span>
+                        ) : (
+                          <span style={{ color: T.textTer }}>—</span>
+                        )}
+                      </td>
+                      {scope === "Project" && (
+                        <td style={{ padding: "11px 14px", color: T.textSec, fontWeight: 600 }}>
+                          {projectName(r.projectId)}
+                        </td>
                       )}
-                    </div>
-                  </div>
-                </td>
-                <td style={{ padding: "11px 14px", color: T.textSec }}>{r.owner}</td>
-                <td style={{ padding: "11px 14px" }}>
-                  {overdueCell(r.targetDate, r.status === "Closed")}
-                </td>
-                <td style={{ padding: "11px 14px" }}>
-                  {overdueCell(r.nextReviewDate, r.status === "Closed")}
-                </td>
-                <td style={{ padding: "11px 14px" }}>
-                  <RiskStatusText status={r.status} />
-                </td>
-                {scope === "Project" && (
-                  <td style={{ padding: "11px 14px", color: T.textSec, fontWeight: 600 }}>
-                    {projectName(r.projectId)}
-                  </td>
-                )}
-                <td
-                  style={{ padding: "11px 14px", color: T.brand }}
-                  onClick={(e) => r.archived && e.stopPropagation()}
-                >
-                  {r.archived ? (
-                    can("risks:archive") && (
-                      <Btn
-                        variant="subtle"
-                        loading={restoring === r.riskReference}
-                        onClick={() => void onRestore(r.riskReference)}
-                        style={{ padding: "4px 10px", fontSize: 12 }}
+                      <td
+                        style={{ padding: "11px 14px", color: T.brand }}
+                        onClick={(e) => r.archived && e.stopPropagation()}
                       >
-                        Restore
-                      </Btn>
-                    )
-                  ) : (
-                    <ArrowRight size={16} />
-                  )}
-                </td>
-              </tr>
-            ))}
+                        {r.archived ? (
+                          can("risks:archive") && (
+                            <Btn
+                              variant="subtle"
+                              loading={restoring === r.riskReference}
+                              onClick={() => void onRestore(r.riskReference)}
+                              style={{ padding: "4px 10px", fontSize: 12 }}
+                            >
+                              Restore
+                            </Btn>
+                          )
+                        ) : (
+                          <ArrowRight size={16} />
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
           </tbody>
         </table>
-        {total === 0 && <EmptyState>No risks match the current filters.</EmptyState>}
+        {total === 0 && !dataLoading && <EmptyState>No risks match the current filters.</EmptyState>}
         <Pagination
           page={page}
           pageCount={pageCount}

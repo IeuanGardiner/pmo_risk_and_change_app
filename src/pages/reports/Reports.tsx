@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import { Btn, Card, EmptyState, PageHeader, SectionTitle } from "../../components/ui";
 import { usePageTitle } from "../../hooks/usePageTitle";
@@ -11,6 +11,8 @@ import { money } from "../../utils/format";
 export function Reports() {
   const { activeRisks, changes } = useAppData();
   usePageTitle("Reports");
+  const [exportingRisks, setExportingRisks] = useState(false);
+  const [exportingChanges, setExportingChanges] = useState(false);
 
   /* ---- Risk exposure by category ---- */
   const riskByCategory = useMemo(() => {
@@ -58,7 +60,9 @@ export function Reports() {
     [changes],
   );
 
-  const exportRisks = () =>
+  const exportRisks = async () => {
+    setExportingRisks(true);
+    await new Promise((r) => setTimeout(r, 0));
     downloadCsv(
       "report-risk-exposure.csv",
       ["Category", "Risks", "Estimated", "Realised", "Released", "Open Exposure"],
@@ -67,13 +71,19 @@ export function Reports() {
         Math.max(v.est - v.realised - v.released, 0),
       ]),
     );
+    setExportingRisks(false);
+  };
 
-  const exportChanges = () =>
+  const exportChanges = async () => {
+    setExportingChanges(true);
+    await new Promise((r) => setTimeout(r, 0));
     downloadCsv(
       "report-change-summary.csv",
       ["Status", "Changes", "Cost Impact", "Schedule Days"],
       changeByStatus.map((r) => [r.status, r.count, r.cost, r.days]),
     );
+    setExportingChanges(false);
+  };
 
   const th = {
     padding: "10px 14px",
@@ -97,7 +107,7 @@ export function Reports() {
         <Card style={{ padding: 18 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <SectionTitle sub="Active risks, by category">Risk Exposure</SectionTitle>
-            <Btn variant="default" icon={Download} onClick={exportRisks}>
+            <Btn variant="default" icon={Download} loading={exportingRisks} onClick={() => void exportRisks()}>
               CSV
             </Btn>
           </div>
@@ -159,7 +169,7 @@ export function Reports() {
           <SectionTitle sub="Pipeline position with net cost and schedule impact">
             Change Summary
           </SectionTitle>
-          <Btn variant="default" icon={Download} onClick={exportChanges}>
+          <Btn variant="default" icon={Download} loading={exportingChanges} onClick={() => void exportChanges()}>
             CSV
           </Btn>
         </div>

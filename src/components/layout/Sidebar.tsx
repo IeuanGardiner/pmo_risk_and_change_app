@@ -14,21 +14,21 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import React, { type RefObject } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { T } from "../../theme/tokens";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppData } from "../../store/AppData";
 import { BrandMark } from "../Brand";
 import type { Permission } from "../../types/auth";
-import { GlobalSearch } from "../GlobalSearch";
+import { GlobalSearch, type GlobalSearchHandle } from "../GlobalSearch";
 
 interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
   end: boolean;
-  /** Hidden unless the signed-in user holds this permission. */
   permission: Permission;
 }
 
@@ -71,16 +71,23 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ searchRef }: { searchRef?: RefObject<GlobalSearchHandle | null> }) {
   const { activeProjects, activeRisks, changes, config } = useAppData();
   const { session, user, can, signOut } = useAuth();
   const { scheme, toggle } = useTheme();
   const { appName, tagline, logoUrl } = config.branding;
+  const location = useLocation();
 
   const sections = NAV_SECTIONS.map((s) => ({
     ...s,
     items: s.items.filter((item) => can(item.permission)),
   })).filter((s) => s.items.length > 0);
+
+  const isSectionActive = (items: NavItem[]) =>
+    items.some((item) => {
+      if (item.end) return location.pathname === item.to;
+      return location.pathname.startsWith(item.to);
+    });
 
   return (
     <div
@@ -134,48 +141,52 @@ export function Sidebar() {
         </button>
       </div>
 
-      <GlobalSearch />
+      <GlobalSearch ref={searchRef as React.RefObject<GlobalSearchHandle>} />
 
       <div style={{ padding: "0 10px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
-        {sections.map((section) => (
-          <div key={section.label}>
-            <div
-              style={{
-                fontSize: 10,
-                color: T.textTer,
-                letterSpacing: 1.2,
-                textTransform: "uppercase",
-                padding: "12px 11px 4px",
-                fontWeight: 700,
-              }}
-            >
-              {section.label}
+        {sections.map((section) => {
+          const active = isSectionActive(section.items);
+          return (
+            <div key={section.label}>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: active ? T.sidebarText : T.textTer,
+                  letterSpacing: 1.2,
+                  textTransform: "uppercase",
+                  padding: "12px 11px 4px",
+                  fontWeight: 700,
+                  borderLeft: active ? `2px solid ${T.brand}` : "2px solid transparent",
+                }}
+              >
+                {section.label}
+              </div>
+              {section.items.map((item) => (
+                <NavLink key={item.to} to={item.to} end={item.end} style={{ textDecoration: "none" }}>
+                  {({ isActive }) => (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 11,
+                        padding: "8px 11px",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                        fontSize: 13.5,
+                        fontWeight: isActive ? 600 : 500,
+                        color: isActive ? "#fff" : T.sidebarText,
+                        background: isActive ? T.brand : "transparent",
+                      }}
+                    >
+                      <item.icon size={17} />
+                      {item.label}
+                    </div>
+                  )}
+                </NavLink>
+              ))}
             </div>
-            {section.items.map((item) => (
-              <NavLink key={item.to} to={item.to} end={item.end} style={{ textDecoration: "none" }}>
-                {({ isActive }) => (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 11,
-                      padding: "8px 11px",
-                      borderRadius: 6,
-                      cursor: "pointer",
-                      fontSize: 13.5,
-                      fontWeight: isActive ? 600 : 500,
-                      color: isActive ? "#fff" : T.sidebarText,
-                      background: isActive ? T.brand : "transparent",
-                    }}
-                  >
-                    <item.icon size={17} />
-                    {item.label}
-                  </div>
-                )}
-              </NavLink>
-            ))}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div style={{ padding: "14px 18px", marginTop: 8, borderTop: `1px solid ${T.sidebarItem}` }}>
@@ -197,6 +208,51 @@ export function Sidebar() {
           {changes.filter((c) => c.status !== "Implemented" && c.status !== "Rejected").length}{" "}
           live changes
         </div>
+      </div>
+
+      {/* Keyboard shortcut hints — only on pointer-fine devices (no touch) */}
+      <style>{`
+        @media (pointer: fine) {
+          .rs-kbd-hints { display: flex !important; }
+        }
+      `}</style>
+      <div
+        className="rs-kbd-hints"
+        style={{
+          display: "none",
+          flexDirection: "column",
+          gap: 4,
+          padding: "10px 18px",
+          borderTop: `1px solid ${T.sidebarItem}`,
+        }}
+      >
+        <div style={{ fontSize: 10, color: T.textTer, fontWeight: 600, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 2 }}>
+          Shortcuts
+        </div>
+        {[
+          { key: "Alt+R", desc: "Add risk" },
+          { key: "Alt+C", desc: "Raise change" },
+          { key: "/", desc: "Search" },
+        ].map(({ key, desc }) => (
+          <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+            <kbd
+              style={{
+                background: T.sidebarItem,
+                color: T.sidebarText,
+                border: `1px solid ${T.textTer}`,
+                borderRadius: 3,
+                padding: "1px 5px",
+                fontFamily: "monospace",
+                fontSize: 10.5,
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {key}
+            </kbd>
+            <span style={{ color: T.textTer }}>{desc}</span>
+          </div>
+        ))}
       </div>
 
       <div

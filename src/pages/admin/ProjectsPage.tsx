@@ -99,6 +99,7 @@ export function ProjectsPage() {
   const [adding, setAdding] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState<Project | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Precomputed once per risks/changes change — avoids O(projects × records) per render.
   const riskCountMap = useMemo(() => {
@@ -161,7 +162,9 @@ export function ProjectsPage() {
     }
   };
 
-  const exportCsv = () =>
+  const exportCsv = async () => {
+    setExporting(true);
+    await new Promise((r) => setTimeout(r, 0));
     downloadCsv(
       "projects.csv",
       ["Code", "Name", "Type", "Client", "Project Manager", "Status", "Start Date", "End Date", "Value", "Risks", "Changes", "Description", "Archived"],
@@ -171,6 +174,8 @@ export function ProjectsPage() {
         p.description, p.archived ? "Yes" : "No",
       ]),
     );
+    setExporting(false);
+  };
 
   return (
     <div style={{ padding: 24, overflow: "auto" }}>
@@ -179,7 +184,7 @@ export function ProjectsPage() {
         subtitle="Maintain the project register — types, clients, status, dates and contract value"
         action={
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn variant="default" icon={Download} onClick={exportCsv}>
+            <Btn variant="default" icon={Download} loading={exporting} onClick={() => void exportCsv()}>
               Export
             </Btn>
             <Btn variant="dark" icon={Plus} onClick={() => setAdding(true)}>
@@ -399,7 +404,11 @@ function ProjectFormModal({
   const toast = useToast();
   const [f, setF] = useState<FormState>(() => fromProject(project));
   const [attempted, setAttempted] = useState(false);
+  const [touched, setTouched] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+
+  const touch = (field: string) =>
+    setTouched((prev) => new Set(prev).add(field));
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setF((p) => ({ ...p, [k]: v }));
 
@@ -453,19 +462,25 @@ function ProjectFormModal({
     }
   };
 
-  const err = (k: string) => (attempted ? errors[k] : undefined);
+  const err = (k: string) => (attempted || touched.has(k) ? errors[k] : undefined);
 
   return (
     <Modal open title={project ? `Edit ${project.code}` : "Add Project"} width={620} onClose={onClose}>
       <Grid2>
         <Field label="Name" required error={err("name")}>
-          <Input value={f.name} autoFocus onChange={(e) => set("name", e.target.value)} />
+          <Input
+            value={f.name}
+            autoFocus
+            onChange={(e) => set("name", e.target.value)}
+            onBlur={() => touch("name")}
+          />
         </Field>
         <Field label="Code" required error={err("code")}>
           <Input
             value={f.code}
             placeholder="PRJ-001"
             onChange={(e) => set("code", e.target.value)}
+            onBlur={() => touch("code")}
           />
         </Field>
         <Field label="Type">

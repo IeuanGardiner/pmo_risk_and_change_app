@@ -1,7 +1,8 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useRef } from "react";
 import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, RequirePermission, useAuth } from "./auth/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { PageSkeleton } from "./components/PageSkeleton";
 import { Sidebar } from "./components/layout/Sidebar";
 import { ToastProvider } from "./components/Toast";
 import { Landing } from "./pages/Landing";
@@ -10,6 +11,8 @@ import { AppDataProvider, useAppData } from "./store/AppData";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { T } from "./theme/tokens";
 import type { Permission } from "./types/auth";
+import { useGlobalShortcuts } from "./hooks/useGlobalShortcuts";
+import type { GlobalSearchHandle } from "./components/GlobalSearch";
 
 // Route-level code splitting — keeps the initial bundle lean. Each chunk is
 // loaded on first navigation to that route and cached thereafter.
@@ -62,6 +65,8 @@ const RolesPage = lazy(() =>
 function Shell() {
   const { loading, error, refresh, config } = useAppData();
   const location = useLocation();
+  const searchRef = useRef<GlobalSearchHandle>(null);
+  useGlobalShortcuts(searchRef);
 
   if (loading || error) {
     return (
@@ -88,12 +93,12 @@ function Shell() {
         fontSize: 14,
       }}
     >
-      <Sidebar />
+      <Sidebar searchRef={searchRef} />
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <div style={{ flex: 1, overflow: "auto" }}>
           {/* Keyed by pathname so navigating away from a crashed view recovers. */}
           <ErrorBoundary key={location.pathname}>
-            <Suspense fallback={null}>
+            <Suspense fallback={<PageSkeleton />}>
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={guarded("risks:read", <RiskDashboard />)} />

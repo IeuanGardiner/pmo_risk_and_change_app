@@ -365,7 +365,7 @@
 .ds-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--modal-backdrop, rgba(0, 0, 0, 0.42));
   z-index: var(--z-modal);
   display: flex;
   align-items: center;

@@ -115,12 +115,12 @@ export const RISK_EVENT_STYLES: Record<RiskEventType, { c: string; bg: string; l
 };
 
 export const CHANGE_STATUS_STYLES: Record<ChangeStatus, { c: string; bg: string }> = {
-  Draft: { c: T.textSec, bg: "#F0F0F0" },
+  Draft: { c: T.textSec, bg: T.bg },
   Submitted: { c: T.brand, bg: T.brandBg },
-  "Under Review": { c: T.purple, bg: "#F5F1FA" },
+  "Under Review": { c: T.purple, bg: alpha(T.purple, 10) },
   Approved: { c: T.low, bg: T.lowBg },
   Rejected: { c: T.critical, bg: T.criticalBg },
-  Implemented: { c: T.teal, bg: "#EBF5F5" },
+  Implemented: { c: T.teal, bg: alpha(T.teal, 12) },
 };
 
 export const PROJECT_STATUS_STYLES: Record<ProjectStatus, { c: string; bg: string }> = {
