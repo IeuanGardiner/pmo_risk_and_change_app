@@ -1,6 +1,7 @@
 import type {
   ChangePriority,
   ChangeStatus,
+  IssueStatus,
   ProjectStatus,
   RiskEventType,
   RiskLevel,
@@ -141,3 +142,9 @@ export const PRIORITY_COLORS: Record<ChangePriority, string> = {
 export const CHART_COLORS = [
   "#B10E1C", "#0F6CBD", "#D9620B", "#C19C00", "#0E7A0B", "#8764B8", "#038387",
 ];
+
+export const ISSUE_STATUS_STYLES: Record<IssueStatus, { c: string; bg: string }> = {
+  "Open":        { c: T.critical, bg: T.criticalBg },
+  "In Progress": { c: T.brand,    bg: T.brandBg    },
+  "Closed":      { c: T.low,      bg: T.lowBg      },
+};

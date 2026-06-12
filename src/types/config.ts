@@ -48,6 +48,8 @@ export interface AppConfig {
   projectTypes: string[];
   /** Risk workflow statuses. "Open" and "Closed" are always present. */
   riskStatuses: string[];
+  /** Issue categories — configurable per deployment. */
+  issueCategories: string[];
   /** Days used to pre-fill the next review date when a risk review is logged. */
   reviewCadenceDays: number;
   matrix: MatrixGrid;
@@ -147,6 +149,16 @@ export const DEFAULT_CONFIG: AppConfig = {
     "Consents & Environment",
   ],
   riskStatuses: ["Open", "Closed"],
+  issueCategories: [
+    "Design",
+    "Construction",
+    "Commercial",
+    "Health & Safety",
+    "Environmental",
+    "Regulatory",
+    "Quality",
+    "Third Party",
+  ],
   reviewCadenceDays: 30,
   matrix: DEFAULT_MATRIX,
   currency: CURRENCIES[0],
@@ -261,6 +273,9 @@ export function sanitizeConfig(raw: unknown): AppConfig {
       ? [...(r.projectTypes as string[])]
       : clone(DEFAULT_CONFIG.projectTypes),
     riskStatuses: sanitizeStatuses(r.riskStatuses),
+    issueCategories: isStringList(r.issueCategories)
+      ? [...(r.issueCategories as string[])]
+      : clone(DEFAULT_CONFIG.issueCategories),
     reviewCadenceDays: sanitizeCadence(r.reviewCadenceDays),
     matrix: sanitizeMatrix(r.matrix),
     currency: sanitizeCurrency(r.currency),
