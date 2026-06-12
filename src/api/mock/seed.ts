@@ -1,6 +1,8 @@
 import type {
   AppUser,
   ChangeRequest,
+  Issue,
+  IssueStatus,
   Project,
   Rating,
   Risk,
@@ -144,6 +146,7 @@ interface RiskSeed {
   project?: string;
   archived?: boolean;
   linkedChanges?: string[];
+  linkedIssues?: string[];
 }
 
 const riskSeed: RiskSeed[] = [
@@ -161,7 +164,7 @@ const riskSeed: RiskSeed[] = [
     mit: "Install additional clamps and bracing on all panels. Daily inspection regime in place. Cordon off zone below during wind > 30mph.",
     comments: "Inspector sign-off required before next lift operation. Escalated to Site Manager on 25 Mar 2026.",
     created: "2026-01-10", start: "2026-01", months: 12, project: "prj-001",
-    linkedChanges: ["C002"],
+    linkedChanges: ["C002"], linkedIssues: ["I001"],
     strategy: "Reduce",
     actions: [
       { title: "Install additional clamps and bracing on Level 4 panels", owner: "J. Hayes", due: "2026-04-15", status: "Complete", completed: "2026-04-12", notes: "Completed alongside the emergency bracing works after the wind event." },
@@ -187,7 +190,7 @@ const riskSeed: RiskSeed[] = [
     mit: "Additional ground investigation commissioned; underpinning options under review.",
     comments: "Weekly settlement monitoring reports circulated to the engineering review board.",
     created: "2026-01-15", start: "2026-02", months: 15, project: "prj-001",
-    linkedChanges: ["C001"],
+    linkedChanges: ["C001"], linkedIssues: ["I002"],
     strategy: "Reduce",
     actions: [
       { title: "Commission additional ground investigation in Zone D", owner: "S. Patel", due: "2026-04-01", status: "Complete", completed: "2026-03-28" },
@@ -208,6 +211,7 @@ const riskSeed: RiskSeed[] = [
     mit: "Replacement system specified; works scheduled for next shutdown window.",
     comments: "",
     created: "2026-01-20", start: "2026-02", months: 10, project: "prj-002",
+    linkedIssues: ["I004"],
     strategy: "Reduce",
     actions: [
       { title: "Specify compliant replacement suppression system", owner: "J. Hayes", due: "2026-03-31", status: "Complete", completed: "2026-03-25" },
@@ -350,7 +354,7 @@ const riskSeed: RiskSeed[] = [
     mit: "Quarterly re-baselining; efficiency challenge across delivery partners.",
     comments: "",
     created: "2026-01-18", start: "2026-01", months: 48,
-    linkedChanges: ["C005"],
+    linkedChanges: ["C005"], linkedIssues: ["I005"],
     strategy: "Reduce",
     reviews: [
       { date: "2026-04-20", comment: "Q1 review — indices softening but exposure unchanged until the indexation mechanism (C005) lands. No re-score.", pl: 5, pi: 3, l: 5, i: 3, next: "2026-09-30" },
@@ -462,7 +466,7 @@ export const SEED_RISKS: Risk[] = riskSeed.map((s) => {
     mitigation: s.mit,
     comments: s.comments,
     linkedChangeRefs: s.linkedChanges ?? [],
-    linkedIssueRefs: [],
+    linkedIssueRefs: s.linkedIssues ?? [],
     archived: s.archived ?? false,
     createdAt: `${s.created}T09:00:00Z`,
     updatedAt: "2026-06-05T09:41:00Z",
@@ -493,6 +497,7 @@ interface ChangeSeed {
   start: string;
   months: number;
   project?: string;
+  linkedIssues?: string[];
   history: { status: ChangeStatus; actor: string; date: string; note?: string }[];
 }
 
@@ -501,7 +506,7 @@ const changeSeed: ChangeSeed[] = [
     ref: "C001", scope: "Project", title: "Underpinning design for warehouse slab foundation",
     category: "Design", priority: "Urgent", status: "Under Review",
     raisedBy: "S. Patel", owner: "I. Gardiner", cost: 850_000, days: 30,
-    requiredBy: "2026-05-01", linkedRisks: ["R002"],
+    requiredBy: "2026-05-01", linkedRisks: ["R002"], linkedIssues: ["I002"],
     impactAreas: ["Design", "Cost", "Schedule"],
     desc: "Adopt mini-pile underpinning for the warehouse slab foundation following ground investigation results in Zone D.",
     just: "Settlement readings exceed tolerance; without intervention the foundation programme stops and R002 is likely to be realised in full.",
@@ -516,7 +521,7 @@ const changeSeed: ChangeSeed[] = [
     ref: "C002", scope: "Project", title: "Revised scaffold design – east elevation",
     category: "Scope", priority: "Urgent", status: "Approved",
     raisedBy: "J. Hayes", owner: "D. Morgan", cost: 240_000, days: 10,
-    requiredBy: "2026-04-01", linkedRisks: ["R001"],
+    requiredBy: "2026-04-01", linkedRisks: ["R001"], linkedIssues: ["I001"],
     impactAreas: ["Scope", "Health & Safety", "Cost"], plannedImpl: "2026-05-15",
     desc: "Replace existing scaffold with a tied system scaffold including additional bracing and wind-load rated panels.",
     just: "Directly mitigates the critical scaffolding collapse risk (R001). Cost is funded from the released risk allowance.",
@@ -635,7 +640,7 @@ export const SEED_CHANGES: ChangeRequest[] = changeSeed.map((s) => ({
   scheduleImpactDays: s.days,
   projectId: s.scope === "Project" ? (s.project ?? PROJECTS[0].id) : null,
   linkedRiskRefs: s.linkedRisks,
-  linkedIssueRefs: [],
+  linkedIssueRefs: s.linkedIssues ?? [],
   approvalHistory: s.history,
   impactAreas: s.impactAreas ?? [],
   plannedImplementationDate: s.plannedImpl ?? null,
@@ -644,3 +649,83 @@ export const SEED_CHANGES: ChangeRequest[] = changeSeed.map((s) => ({
   createdAt: `${s.created}T09:00:00Z`,
   updatedAt: s.history[s.history.length - 1]?.date ?? `${s.created}T09:00:00Z`,
 }));
+
+/* ---- Issues --------------------------------------------------------------- */
+
+const _is = (
+  ref: string,
+  scope: Scope,
+  title: string,
+  description: string,
+  category: string,
+  priority: ChangePriority,
+  status: IssueStatus,
+  owner: string,
+  raisedBy: string,
+  projectId: string | null,
+  estimatedCost: number,
+  targetResolutionDate: string | null,
+  linkedRiskRefs: string[],
+  linkedChangeRefs: string[],
+  archived: boolean,
+  createdAt: string,
+  updatedAt: string,
+): Issue => ({
+  issueReference: ref,
+  scope, title, description, category, priority, status,
+  owner, raisedBy, projectId, estimatedCost, targetResolutionDate,
+  linkedRiskRefs, linkedChangeRefs, archived, createdAt, updatedAt,
+});
+
+export const SEED_ISSUES: Issue[] = [
+  _is(
+    "I001", "Project",
+    "Scaffold inspection record missing",
+    "The statutory scaffold inspection register for the east elevation Level 4 tie-back system has not been signed off by a competent person since the March wind event. The record is overdue and the asset is in use.",
+    "Health & Safety", "Urgent", "Open",
+    "J. Hayes", "I. Gardiner", "prj-001",
+    35_000, "2026-07-01",
+    ["R001"], ["C002"],
+    false, "2026-04-14T09:00:00Z", "2026-06-05T09:41:00Z",
+  ),
+  _is(
+    "I002", "Project",
+    "Zone D settlement monitoring gap",
+    "A two-week gap in the Zone D settlement monitoring programme occurred in May due to instrument failure. The gap creates a compliance issue against the geotechnical management plan and leaves the foundation team without data for the disputed period.",
+    "Quality", "High", "In Progress",
+    "S. Patel", "I. Gardiner", "prj-001",
+    12_000, "2026-07-15",
+    ["R002"], ["C001"],
+    false, "2026-05-20T09:00:00Z", "2026-06-05T09:41:00Z",
+  ),
+  _is(
+    "I003", "Project",
+    "MEP drawing clash on Level 3",
+    "A coordination clash between the HVAC ductwork and the sprinkler main on Level 3 was identified during the latest drawing issue. Works in the affected zone have been stopped pending redesign.",
+    "Design", "Standard", "Open",
+    "R. Singh", "R. Singh", "prj-003",
+    8_500, "2026-08-01",
+    [], [],
+    false, "2026-05-28T09:00:00Z", "2026-06-05T09:41:00Z",
+  ),
+  _is(
+    "I004", "Project",
+    "Fire suppression commissioning hold",
+    "The Authority Having Jurisdiction has placed a formal hold on the fire suppression commissioning programme pending submission of the updated system specification. This directly delays practical completion.",
+    "Regulatory", "High", "Closed",
+    "J. Hayes", "J. Hayes", "prj-002",
+    18_000, "2026-05-30",
+    ["R003"], [],
+    false, "2026-03-10T09:00:00Z", "2026-06-01T14:00:00Z",
+  ),
+  _is(
+    "I005", "Program",
+    "Programme-wide cost data inconsistency",
+    "Reconciliation of the programme cost report identified material differences between project-level cost forecasts and the programme dashboard. The root cause is inconsistent period cut-off dates used by delivery partners.",
+    "Commercial", "High", "In Progress",
+    "I. Gardiner", "I. Gardiner", null,
+    5_000, "2026-07-31",
+    ["R012"], [],
+    false, "2026-05-15T09:00:00Z", "2026-06-05T09:41:00Z",
+  ),
+];
