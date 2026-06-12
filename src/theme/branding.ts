@@ -1,5 +1,6 @@
 import type { BrandingConfig, ThemeMode } from "../types/config";
 import { DEFAULT_BRANDING, sanitizeBranding } from "../types/config";
+import { deriveAccentShades } from "../design-system/utils/colorUtils";
 
 /* ============================================================================
    Branding + theme persistence helpers.
@@ -72,6 +73,14 @@ export function applyThemeToDocument(scheme: "light" | "dark", brandColor: strin
   const root = document.documentElement;
   root.dataset.theme = scheme;
   root.style.setProperty("--brand", brandColor);
+
+  // Keep design-system accent shades in sync for any context where CSS
+  // cascade alone (var(--brand)) may not resolve (e.g. SVG presentation attrs).
+  const { accent200, accent500, accent600 } = deriveAccentShades(brandColor);
+  root.style.setProperty("--accent-500", accent500);
+  root.style.setProperty("--accent-600", accent600);
+  root.style.setProperty("--accent-200", accent200);
+
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", scheme === "dark" ? "#121317" : brandColor);
 }
