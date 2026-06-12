@@ -38,10 +38,10 @@ export interface CostProfile {
 /**
  * A draw-down event against a risk:
  *  - "Realised"  the risk happened — this is the cost it incurred and when.
- *  - "Released"  it won't happen (in full or in part) — value handed back.
- *  - "Reduced"   the estimate has been revised down while the risk stays open.
+ *  - "Released"  it won't happen (in full or in part) — value handed back to
+ *                the budget. A downward estimate revision is a partial release.
  */
-export type RiskEventType = "Realised" | "Released" | "Reduced";
+export type RiskEventType = "Realised" | "Released";
 
 export interface RiskEvent {
   id: string;
@@ -173,8 +173,6 @@ export interface Risk {
   realisedTotal: number;
   /** Derived from the ledger (sum of "Released" events). Server-computed. */
   releasedTotal: number;
-  /** Derived from the ledger (sum of "Reduced" events). Server-computed. */
-  reducedTotal: number;
   costProfile: CostProfile;
   /** Update / draw-down ledger — appended via the risk event endpoint. */
   events: RiskEvent[];
@@ -205,7 +203,6 @@ export type RiskInput = Omit<
   | "targetLevel"
   | "realisedTotal"
   | "releasedTotal"
-  | "reducedTotal"
   | "events"
   | "actions"
   | "reviews"

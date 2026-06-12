@@ -118,7 +118,6 @@ const withTotals = (risk: Risk): Risk => {
     ...risk,
     realisedTotal: sum("Realised"),
     releasedTotal: sum("Released"),
-    reducedTotal: sum("Reduced"),
   };
 };
 
@@ -177,7 +176,6 @@ export function createMockServices(): Services {
           : null,
         realisedTotal: 0,
         releasedTotal: 0,
-        reducedTotal: 0,
         events: [],
         actions: [],
         reviews: [],

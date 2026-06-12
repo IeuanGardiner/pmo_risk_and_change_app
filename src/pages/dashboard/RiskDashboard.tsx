@@ -49,8 +49,7 @@ export function RiskDashboard() {
   const totalEst = activeRisks.reduce((a, r) => a + r.estimatedTotal, 0);
   const totalReleased = activeRisks.reduce((a, r) => a + r.releasedTotal, 0);
   const totalRealised = activeRisks.reduce((a, r) => a + r.realisedTotal, 0);
-  const totalReduced = activeRisks.reduce((a, r) => a + r.reducedTotal, 0);
-  const totalExposure = Math.max(totalEst - totalReleased - totalRealised - totalReduced, 0);
+  const totalExposure = Math.max(totalEst - totalReleased - totalRealised, 0);
 
   const byCat = useMemo(
     () =>
@@ -324,7 +323,6 @@ export function RiskDashboard() {
               <Line type="monotone" dataKey="exposure" name="Open exposure" stroke={c.brand} strokeWidth={2.2} dot={false} />
               <Line type="monotone" dataKey="realised" name="Realised" stroke={c.critical} strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="released" name="Released" stroke={c.low} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="reduced" name="Reduced" stroke={c.medium} strokeWidth={2} strokeDasharray="5 4" dot={false} />
             </LineChart>
           </ResponsiveContainer>
         </Card>
