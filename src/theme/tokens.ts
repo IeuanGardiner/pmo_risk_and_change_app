@@ -112,7 +112,6 @@ export const riskStatusColor = (status: string): string =>
 export const RISK_EVENT_STYLES: Record<RiskEventType, { c: string; bg: string; label: string }> = {
   Realised: { c: T.critical, bg: T.criticalBg, label: "Realised" },
   Released: { c: T.low, bg: T.lowBg, label: "Released" },
-  Reduced: { c: T.brand, bg: T.brandBg, label: "Reduced" },
 };
 
 export const CHANGE_STATUS_STYLES: Record<ChangeStatus, { c: string; bg: string }> = {

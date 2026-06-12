@@ -53,11 +53,10 @@ export const CLOSED_STATUS = "Closed";
 export const OPEN_STATUS = "Open";
 export const isClosed = (status: string): boolean => status === CLOSED_STATUS;
 
-export const RISK_EVENT_TYPES: RiskEventType[] = ["Realised", "Released", "Reduced"];
+export const RISK_EVENT_TYPES: RiskEventType[] = ["Realised", "Released"];
 export const RISK_EVENT_LABELS: Record<RiskEventType, string> = {
   Realised: "Realised — the risk happened",
   Released: "Released — value handed back",
-  Reduced: "Reduced — estimate revised down",
 };
 
 /* ---- Response strategy & mitigation actions ------------------------------ */

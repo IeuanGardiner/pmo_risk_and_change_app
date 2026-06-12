@@ -99,12 +99,11 @@ export interface DrawdownPoint {
   exposure: number;
   realised: number;
   released: number;
-  reduced: number;
 }
 
-/** Portfolio drawdown across the shared timeline (in millions). Realised,
-    released and reduced lines step at the months the ledger events actually
-    occurred — never smeared — and exposure draws down accordingly. */
+/** Portfolio drawdown across the shared timeline (in millions). Realised and
+    released lines step at the months the ledger events actually occurred —
+    never smeared — and exposure draws down accordingly. */
 export function drawdownSeries(risks: Risk[]): DrawdownPoint[] {
   const events = risks.flatMap((r) => r.events);
   const timeline = buildTimeline(
@@ -117,13 +116,11 @@ export function drawdownSeries(risks: Risk[]): DrawdownPoint[] {
   return timeline.map((t) => {
     const realised = cumulativeTo(events, "Realised", t.key);
     const released = cumulativeTo(events, "Released", t.key);
-    const reduced = cumulativeTo(events, "Reduced", t.key);
     return {
       m: t.label,
-      exposure: Math.max(totalEst - realised - released - reduced, 0) / 1e6,
+      exposure: Math.max(totalEst - realised - released, 0) / 1e6,
       realised: realised / 1e6,
       released: released / 1e6,
-      reduced: reduced / 1e6,
     };
   });
 }
@@ -148,11 +145,10 @@ export function riskDrawdown(risk: Risk): RiskDrawdownPoint[] {
     cumSpend += valueAt(risk.costProfile, t.key);
     const realised = cumulativeTo(risk.events, "Realised", t.key);
     const released = cumulativeTo(risk.events, "Released", t.key);
-    const reduced = cumulativeTo(risk.events, "Reduced", t.key);
     return {
       m: t.label,
       forecast: Math.max(risk.estimatedTotal - cumSpend, 0) / 1e6,
-      exposure: Math.max(risk.estimatedTotal - realised - released - reduced, 0) / 1e6,
+      exposure: Math.max(risk.estimatedTotal - realised - released, 0) / 1e6,
       realised: realised / 1e6,
       released: released / 1e6,
     };

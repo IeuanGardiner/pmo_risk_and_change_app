@@ -25,11 +25,11 @@ environment variable.
   position becomes clearer:
   - **Realised** — the risk happened: record the actual cost and the date
   - **Released** — it won't happen (in full or part): hand the value back, and
-    optionally close the risk
-  - **Reduced** — revise the estimate down while the risk stays open
+    optionally close the risk. A downward estimate revision is logged as a
+    partial release
   Every event is dated and recorded in the risk's **change log**, and the
-  realised / released / reduced totals (and the live open exposure) derive from
-  the ledger — so charts and reports reflect what actually happened, when
+  realised / released totals (and the live open exposure) derive from the
+  ledger — so charts and reports reflect what actually happened, when
 - Risk detail — severity banner, full attributes, mitigation, next review date,
   linked change requests, cost-position cards, exposure-vs-forecast drawdown
   chart, change log, Log Update / Close / Archive / Restore actions
@@ -190,7 +190,7 @@ in `src/api/mock/mockServices.ts`):
   **both** target ratings are set, else `null`. The pair is both-or-neither —
   reject a payload that sets only one. A matrix change on `PUT /api/config`
   re-bands **both** `level` and `targetLevel` for every stored risk
-- A risk's `realisedTotal`, `releasedTotal` and `reducedTotal` are **derived**
+- A risk's `realisedTotal` and `releasedTotal` are **derived**
   from its `events` ledger (sum by type). `POST /api/risks/:ref/events` appends
   an entry, recomputes these totals, and sets `status = "Closed"` when the event
   has `closeRisk: true`. The ledger is the source of truth — these totals are

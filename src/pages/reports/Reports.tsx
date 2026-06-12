@@ -16,15 +16,14 @@ export function Reports() {
   const riskByCategory = useMemo(() => {
     const m = new Map<
       string,
-      { count: number; est: number; realised: number; released: number; reduced: number }
+      { count: number; est: number; realised: number; released: number }
     >();
     for (const r of activeRisks) {
-      const e = m.get(r.category) ?? { count: 0, est: 0, realised: 0, released: 0, reduced: 0 };
+      const e = m.get(r.category) ?? { count: 0, est: 0, realised: 0, released: 0 };
       e.count += 1;
       e.est += r.estimatedTotal;
       e.realised += r.realisedTotal;
       e.released += r.releasedTotal;
-      e.reduced += r.reducedTotal;
       m.set(r.category, e);
     }
     return [...m.entries()].sort((a, b) => b[1].est - a[1].est);
@@ -62,8 +61,11 @@ export function Reports() {
   const exportRisks = () =>
     downloadCsv(
       "report-risk-exposure.csv",
-      ["Category", "Risks", "Estimated", "Realised", "Released", "Reduced"],
-      riskByCategory.map(([cat, v]) => [cat, v.count, v.est, v.realised, v.released, v.reduced]),
+      ["Category", "Risks", "Estimated", "Realised", "Released", "Open Exposure"],
+      riskByCategory.map(([cat, v]) => [
+        cat, v.count, v.est, v.realised, v.released,
+        Math.max(v.est - v.realised - v.released, 0),
+      ]),
     );
 
   const exportChanges = () =>
@@ -105,7 +107,7 @@ export function Reports() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {["Category", "Risks", "Estimated", "Realised", "Released", "Reduced"].map((h) => (
+                  {["Category", "Risks", "Estimated", "Realised", "Released", "Open Exposure"].map((h) => (
                     <th key={h} style={th}>{h}</th>
                   ))}
                 </tr>
@@ -118,7 +120,9 @@ export function Reports() {
                     <td style={{ ...td, fontWeight: 600, color: T.text }}>{money(v.est)}</td>
                     <td style={{ ...td, color: T.critical }}>{money(v.realised)}</td>
                     <td style={{ ...td, color: T.low }}>{money(v.released)}</td>
-                    <td style={td}>{money(v.reduced)}</td>
+                    <td style={{ ...td, fontWeight: 600, color: T.brand }}>
+                      {money(Math.max(v.est - v.realised - v.released, 0))}
+                    </td>
                   </tr>
                 ))}
               </tbody>

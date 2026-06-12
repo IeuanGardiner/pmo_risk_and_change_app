@@ -66,10 +66,7 @@ export function RiskDetail() {
   const project = projects.find((p) => p.id === risk.projectId);
   const reviewOverdue = !closed && isOverdue(risk.nextReviewDate);
 
-  const remaining = Math.max(
-    risk.estimatedTotal - risk.realisedTotal - risk.releasedTotal - risk.reducedTotal,
-    0,
-  );
+  const remaining = Math.max(risk.estimatedTotal - risk.realisedTotal - risk.releasedTotal, 0);
 
   const hasTarget = risk.targetLevel != null && risk.targetScore != null;
 
@@ -361,7 +358,7 @@ export function RiskDetail() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(5, 1fr)",
+            gridTemplateColumns: "repeat(4, 1fr)",
             gap: 10,
             marginBottom: 12,
           }}
@@ -371,7 +368,6 @@ export function RiskDetail() {
             ["Open Exposure", remaining, T.brand, "Still at risk"],
             ["Realised", risk.realisedTotal, RISK_EVENT_STYLES.Realised.c, "Cost incurred"],
             ["Released", risk.releasedTotal, RISK_EVENT_STYLES.Released.c, "Handed back"],
-            ["Reduced", risk.reducedTotal, T.textSec, "Estimate revised down"],
           ] as const).map(([l, v, c, sub]) => (
             <div
               key={l}
@@ -423,7 +419,7 @@ export function RiskDetail() {
 
       {/* Risk change log */}
       <Card style={{ padding: 18 }}>
-        <SectionTitle sub="Realised, released and reduced updates recorded against this risk">
+        <SectionTitle sub="Realised and released updates recorded against this risk">
           Risk Change Log {risk.events.length > 0 && `(${risk.events.length})`}
         </SectionTitle>
         <ChangeLog events={risk.events} createdAt={risk.createdAt} estimated={risk.estimatedTotal} />

@@ -25,7 +25,11 @@ async function request<V>(baseUrl: string, path: string, init?: RequestInit): Pr
     throw new Error(`${init?.method ?? "GET"} ${path} failed (${res.status}): ${body}`);
   }
   if (res.status === 204) return undefined as V;
-  return (await res.json()) as V;
+  try {
+    return (await res.json()) as V;
+  } catch {
+    throw new Error(`${init?.method ?? "GET"} ${path} returned an invalid JSON response`);
+  }
 }
 
 export function createHttpServices(baseUrl: string): Services {
@@ -114,7 +118,11 @@ export function createHttpServices(baseUrl: string): Services {
       // send the JSON Content-Type used by the rest of the API.
       const form = new FormData();
       form.append("logo", file);
-      const res = await fetch(`${baseUrl}/api/branding/logo`, { method: "POST", body: form });
+      const res = await fetch(`${baseUrl}/api/branding/logo`, {
+        method: "POST",
+        headers: { ...authHeaders() },
+        body: form,
+      });
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         throw new Error(`POST /api/branding/logo failed (${res.status}): ${body}`);

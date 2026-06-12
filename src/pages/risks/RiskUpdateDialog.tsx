@@ -11,15 +11,15 @@ import { currencySymbol, moneyFull, parseNum } from "../../utils/format";
    Update / close-risk workflow. Logs a draw-down event against a risk:
      - Realised  the risk happened — record the actual cost and when.
      - Released  value handed back (in full or in part); can close the risk.
-     - Reduced   the estimate is revised down while the risk stays open.
-   The risk's realised / released / reduced totals are derived from these
-   entries, so the charts and reports reflect what actually happened, when.
+                 A downward estimate revision is logged as a partial release.
+   The risk's realised / released totals are derived from these entries, so
+   the charts and reports reflect what actually happened, when.
    -------------------------------------------------------------------------- */
 
 const HELP: Record<RiskEventType, string> = {
   Realised: "The risk has occurred. Record the cost incurred and the date it happened.",
-  Released: "The risk (or part of it) will not occur — release the value back to the budget.",
-  Reduced: "Revise the estimated exposure down while keeping the risk open.",
+  Released:
+    "The risk (or part of it) will not occur — release the value back to the budget. Use a partial release to revise the estimate down.",
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -43,10 +43,7 @@ export function RiskUpdateDialog({
   const { addRiskEvent } = useAppData();
   const toast = useToast();
 
-  const remaining = Math.max(
-    risk.estimatedTotal - risk.realisedTotal - risk.releasedTotal - risk.reducedTotal,
-    0,
-  );
+  const remaining = Math.max(risk.estimatedTotal - risk.realisedTotal - risk.releasedTotal, 0);
 
   const [type, setType] = useState<RiskEventType>(defaultType);
   const [amount, setAmount] = useState("");

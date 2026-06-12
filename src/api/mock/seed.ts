@@ -296,7 +296,7 @@ const riskSeed: RiskSeed[] = [
     est: 220_000,
     events: [
       { type: "Realised", amount: 10_000, date: "2026-03-22", note: "Extra cube testing and sampling costs." },
-      { type: "Reduced", amount: 30_000, date: "2026-04-18", note: "Estimate revised down after the supplier mix audit reduced the likely rework." },
+      { type: "Released", amount: 30_000, date: "2026-04-18", note: "Partial release — the supplier mix audit reduced the likely rework." },
       { type: "Released", amount: 50_000, date: "2026-05-02", note: "Released as test variability returned within tolerance." },
     ],
     desc: "Cube test variability above acceptable threshold.",
@@ -344,7 +344,7 @@ const riskSeed: RiskSeed[] = [
     status: "Open", target: "2030-03-31", review: "2026-09-30",
     est: 6_800_000,
     events: [
-      { type: "Reduced", amount: 800_000, date: "2026-04-20", note: "Contingency re-baselined down at the Q1 review as indices softened." },
+      { type: "Released", amount: 800_000, date: "2026-04-20", note: "Contingency released at the Q1 re-baseline as indices softened." },
     ],
     desc: "Programme-wide cost inflation eroding the programme contingency.",
     mit: "Quarterly re-baselining; efficiency challenge across delivery partners.",
@@ -363,7 +363,7 @@ const riskSeed: RiskSeed[] = [
     status: "Open", target: "2028-03-31", review: "2026-08-31",
     est: 2_000_000,
     events: [
-      { type: "Reduced", amount: 500_000, date: "2026-05-10", note: "Lower compliance cost expected after scenario planning identified a cheaper route." },
+      { type: "Released", amount: 500_000, date: "2026-05-10", note: "Partial release — scenario planning identified a cheaper compliance route." },
     ],
     desc: "Changes to building-safety regulation affecting design approval and compliance costs across the programme.",
     mit: "Horizon-scanning; scenario plans for alternative compliance routes.",
@@ -454,7 +454,6 @@ export const SEED_RISKS: Risk[] = riskSeed.map((s) => {
     estimatedTotal: s.est,
     realisedTotal: sumEvents(events, "Realised"),
     releasedTotal: sumEvents(events, "Released"),
-    reducedTotal: sumEvents(events, "Reduced"),
     costProfile: evenProfile(s.est, s.start, s.months),
     events,
     responseStrategy: s.strategy ?? null,

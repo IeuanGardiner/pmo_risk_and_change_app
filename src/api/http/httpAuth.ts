@@ -19,7 +19,11 @@ async function request<V>(baseUrl: string, path: string, init?: RequestInit): Pr
     throw new Error(`${init?.method ?? "GET"} ${path} failed (${res.status}): ${body}`);
   }
   if (res.status === 204) return undefined as V;
-  return (await res.json()) as V;
+  try {
+    return (await res.json()) as V;
+  } catch {
+    throw new Error(`${init?.method ?? "GET"} ${path} returned an invalid JSON response`);
+  }
 }
 
 export function createHttpAuthServices(baseUrl: string): AuthServices {
