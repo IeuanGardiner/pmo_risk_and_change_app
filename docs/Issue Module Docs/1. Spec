@@ -1,0 +1,475 @@
+# Spec: Issues Module — RiskShield
+
+## Objective
+
+Add a first-class **Issues** module to RiskShield: a configurable problem log for things
+that have already gone wrong and need tracking to resolution. Issues sit alongside the
+existing Risk Register (future threats) and Change Register (formal scope decisions) to
+close the gap for real-world, in-flight problems.
+
+### User stories
+
+- As a PMO user I can log an issue with a category, priority, owner, estimated cost and
+  target resolution date so that nothing falls through the cracks.
+- As a PMO user I can link an issue to one or more risks and/or change requests so that
+  the full picture of a problem is connected.
+- As a PMO user I can move an issue through Open → In Progress → Closed so that the
+  register shows live status.
+- As an Admin I can configure issue categories in Settings so that the module fits any
+  client or industry without code changes.
+- As a PMO user I can see linked issues on the Risk Detail and Change Detail pages.
+- As a Read-Only user I can view the issue register and issue detail but cannot create
+  or edit.
+
+---
+
+## Tech Stack
+
+| Concern | Choice |
+|---|---|
+| Framework | React 18 + TypeScript 5.6 |
+| Build | Vite 5 |
+| Routing | react-router-dom v6 (HashRouter, lazy routes) |
+| Charts | recharts 2 |
+| Icons | lucide-react |
+| State | React context (`AppDataProvider`) |
+| Styling | Inline styles + CSS custom properties (no Tailwind, no CSS modules) |
+| Mock data | In-memory store in `src/api/mock/` |
+| HTTP mode | `fetch` against `VITE_API_BASE_URL` in `src/api/http/` |
+
+---
+
+## Commands
+
+```bash
+npm run dev        # dev server at http://localhost:5173
+npm run build      # tsc -b && vite build (type-check + production bundle)
+npm run typecheck  # tsc -b --noEmit (no emit, fastest check)
+npm run preview    # serve the dist/ folder locally
+```
+
+---
+
+## Project Structure
+
+New and modified files for this feature:
+
+```
+src/
+  types/
+    domain.ts             MODIFY  — add Issue, IssueInput, IssueStatus; extend Risk + ChangeRequest
+    config.ts             MODIFY  — add issueCategories to AppConfig, DEFAULT_CONFIG, sanitizeConfig
+    lookups.ts            MODIFY  — add ISSUE_STATUSES, ISSUE_STATUS_STYLES helper
+
+  api/
+    services.ts           MODIFY  — add IssueService interface; add to Services
+    mock/
+      seed.ts             MODIFY  — add SEED_ISSUES; add linkedIssueRefs to SEED_RISKS/SEED_CHANGES
+      mockServices.ts     MODIFY  — implement IssueService; add syncIssueLinks()
+    http/
+      httpServices.ts     MODIFY  — implement HTTP IssueService
+
+  store/
+    AppData.tsx           MODIFY  — add issues state, selectors, mutation callbacks
+
+  theme/
+    tokens.ts             MODIFY  — add ISSUE_STATUS_STYLES
+
+  pages/
+    issues/
+      IssueRegister.tsx   NEW     — sortable/filterable register with scope + status tabs
+      IssueDetail.tsx     NEW     — detail view: attributes, cost, linked risks/changes, change log
+      IssueForm.tsx       NEW     — Add (wizard step 1 + step 2) and Edit forms
+
+    risks/
+      RiskDetail.tsx      MODIFY  — add "Linked Issues" section (like Linked Changes)
+    changes/
+      ChangeDetail.tsx    MODIFY  — add "Linked Issues" section
+
+    settings/
+      SettingsPage.tsx    MODIFY  — add issueCategories LookupListEditor
+
+  components/
+    layout/
+      Sidebar.tsx         MODIFY  — add Issues nav section (Register + Raise Issue)
+
+  App.tsx                 MODIFY  — add lazy routes for issues pages
+```
+
+---
+
+## Domain Model
+
+### New types (`src/types/domain.ts`)
+
+```typescript
+export type IssueStatus = "Open" | "In Progress" | "Closed";
+
+export interface Issue {
+  issueReference: string;            // "I001", "I002", …  server-assigned
+  scope: Scope;                      // "Project" | "Program"
+  title: string;
+  description: string;
+  category: string;                  // from config.issueCategories
+  priority: ChangePriority;          // reuse "Urgent"|"High"|"Standard"|"Low"
+  status: IssueStatus;
+  owner: string;
+  raisedBy: string;
+  projectId: string | null;          // null for Program scope
+  estimatedCost: number;             // simple field — no calendar profile
+  targetResolutionDate: string | null; // ISO date yyyy-mm-dd
+  linkedRiskRefs: string[];
+  linkedChangeRefs: string[];
+  archived: boolean;
+  createdAt: string;                 // ISO datetime, server-owned
+  updatedAt: string;                 // ISO datetime, server-owned
+}
+
+export type IssueInput = Omit<
+  Issue,
+  "issueReference" | "archived" | "createdAt" | "updatedAt"
+>;
+```
+
+### Extensions to existing types
+
+```typescript
+// Risk — add:
+linkedIssueRefs: string[];
+
+// ChangeRequest — add:
+linkedIssueRefs: string[];
+```
+
+### Config (`src/types/config.ts`)
+
+```typescript
+// AppConfig — add:
+issueCategories: string[];
+
+// DEFAULT_CONFIG — add:
+issueCategories: [
+  "Design",
+  "Construction",
+  "Commercial",
+  "Health & Safety",
+  "Environmental",
+  "Regulatory",
+  "Quality",
+  "Third Party",
+],
+```
+
+---
+
+## Service Interface
+
+### `IssueService` (`src/api/services.ts`)
+
+```typescript
+export interface IssueService {
+  list(): Promise<Issue[]>;
+  get(ref: string): Promise<Issue | null>;
+  create(input: IssueInput): Promise<Issue>;
+  update(ref: string, patch: Partial<IssueInput>): Promise<Issue>;
+  archive(ref: string): Promise<Issue>;
+  restore(ref: string): Promise<Issue>;
+}
+```
+
+`Services` gains `issues: IssueService`.
+
+### REST contract (HTTP mode)
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/api/issues` | — | `Issue[]` (including archived) |
+| GET | `/api/issues/:ref` | — | `Issue` |
+| POST | `/api/issues` | `IssueInput` | `Issue` (server assigns ref, timestamps) |
+| PATCH | `/api/issues/:ref` | `Partial<IssueInput>` | `Issue` |
+| POST | `/api/issues/:ref/archive` | — | `Issue` |
+| POST | `/api/issues/:ref/restore` | — | `Issue` |
+
+Status changes (Open → In Progress → Closed) are plain `PATCH` calls with
+`{ status: "..." }` — no separate transition endpoint needed.
+
+---
+
+## Bidirectional Linking
+
+Issues link to risks and changes. The mock layer keeps all three in sync:
+
+```
+issue.linkedRiskRefs   ↔  risk.linkedIssueRefs
+issue.linkedChangeRefs ↔  change.linkedIssueRefs
+```
+
+`syncIssueLinks(issueRef, linkedRiskRefs, linkedChangeRefs)` in `mockServices.ts`
+mirrors the existing `syncRiskLinks()` pattern.
+
+The backend must enforce the same consistency on create, update and delete.
+
+---
+
+## Permissions
+
+No new permissions. Issues reuse the existing RBAC model:
+
+| Action | Permission required |
+|---|---|
+| View issues, register, detail | `risks:read` (issues are in-scope for any PMO reader) |
+| Log, edit issues | `risks:update` |
+| Archive / restore | `risks:archive` |
+
+> Rationale: issues are operationally closer to risks than changes. Using existing
+> permissions avoids a breaking change to the RBAC model and means all existing
+> roles work without migration.
+
+---
+
+## UI Patterns
+
+All new pages follow the established RiskShield conventions:
+
+- **Register**: scope toggle (Project / Program), status tabs (All / Open / In Progress / Closed), priority filter, sortable columns (`useSortPage`), pagination, CSV export, `SkeletonRow` while loading.
+- **Detail**: severity banner (colour-keyed to priority), attribute table, linked risks section, linked changes section, Log Update button (PATCH status inline via a simple status-select modal).
+- **Form**: 2-step wizard — Step 1: info fields; Step 2: cost + linking (risks + changes checkboxes, same `RiskLinker` pattern).
+- **Sidebar**: new "Issues" section with "Issue Register" and "Raise Issue" items, permission-gated on `risks:update`.
+- **Settings**: `LookupListEditor` for `issueCategories`, usage-count-protected (cannot delete a category in use).
+
+### Issue reference format
+
+`I` + zero-padded 3-digit integer: `I001`, `I002`, …
+
+### Status styling (`src/theme/tokens.ts`)
+
+```typescript
+export const ISSUE_STATUS_STYLES: Record<IssueStatus, { c: string; bg: string }> = {
+  "Open":        { c: T.critical, bg: T.criticalBg },
+  "In Progress": { c: T.brand,    bg: T.brandBg     },
+  "Closed":      { c: T.low,      bg: T.lowBg       },
+};
+```
+
+---
+
+## Code Style
+
+Follow existing patterns exactly — no new libraries, no new style approaches:
+
+```typescript
+// ✅ Correct — lazy route (App.tsx pattern)
+const IssueRegister = lazy(() =>
+  import("./pages/issues/IssueRegister").then((m) => ({ default: m.IssueRegister })),
+);
+
+// ✅ Correct — upsert pattern (AppData.tsx pattern)
+const upsertIssue = useCallback((rec: Issue) =>
+  setIssues((prev) => {
+    const exists = prev.some((i) => i.issueReference === rec.issueReference);
+    return exists
+      ? prev.map((i) => (i.issueReference === rec.issueReference ? rec : i))
+      : [...prev, rec];
+  }), []);
+
+// ✅ Correct — inline styles referencing CSS vars (tokens pattern)
+<div style={{ color: T.brand, background: T.brandBg }}>...</div>
+
+// ❌ Wrong — do not use Tailwind, CSS modules, or styled-components
+// ❌ Wrong — do not add new npm dependencies
+```
+
+Naming:
+- Files: `PascalCase.tsx` for components/pages
+- Hooks: `useSomething`
+- Types: `PascalCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Accessors for `useSortPage`: module-level `const ACCESSORS = { ... } satisfies Record<...>`
+
+---
+
+## Testing Strategy
+
+This codebase has no automated test suite today. Testing is manual + type-checking:
+
+```bash
+npm run typecheck   # must pass with 0 errors before any PR
+npm run build       # must complete with 0 errors
+```
+
+Manual verification checkpoints per task (see Tasks section):
+
+1. `npm run typecheck` passes
+2. `npm run build` produces a clean bundle
+3. Manual smoke test of the new UI path in the browser
+
+If a test suite is introduced in future, unit tests belong in `src/__tests__/`
+and integration tests in `src/__tests__/integration/`.
+
+---
+
+## Boundaries
+
+**Always:**
+- Run `npm run typecheck` before considering any task done
+- Follow the inline-style + CSS-var pattern — no exceptions
+- Keep all new files within the `src/` structure above
+- Keep `SEED_ISSUES` realistic and consistent with `SEED_RISKS` / `SEED_CHANGES`
+- Keep `sanitizeConfig` updated whenever `AppConfig` changes
+
+**Ask first:**
+- Adding a new npm dependency
+- Adding a new permission to `PERMISSIONS` in `auth.ts`
+- Changing the `Risk` or `ChangeRequest` REST shape beyond the `linkedIssueRefs` addition
+- Adding issues to the Reports page (potential Phase 2 scope)
+
+**Never:**
+- Use `var()` string concatenation for alpha (use `alpha()` helper from `tokens.ts`)
+- Bypass the `services` abstraction and call `fetch` directly from a component
+- Mutate state directly — always go through the service → upsert pattern
+- Hardcode colours — always reference `T.*` tokens or `ISSUE_STATUS_STYLES`
+
+---
+
+## Success Criteria
+
+- [ ] `npm run typecheck` passes with 0 errors across all modified and new files
+- [ ] `npm run build` completes cleanly; recharts chunk is still split separately
+- [ ] Issue Register renders with scope toggle, status tabs, priority filter, sortable columns, pagination and CSV export
+- [ ] "Raise Issue" wizard (2 steps) creates an issue; toast confirms; redirects to detail
+- [ ] Issue Detail shows attributes, estimated cost, linked risks, linked changes; status can be updated inline
+- [ ] Changing issue status updates `updatedAt` and reflects immediately in the register
+- [ ] Linking an issue to R001 causes `R001.linkedIssueRefs` to contain the issue ref (bidirectional)
+- [ ] Linked issues are visible on Risk Detail and Change Detail pages
+- [ ] Archiving an issue hides it from the default register view; "Show archived" reveals it; restore works
+- [ ] `issueCategories` appears in Settings → LookupListEditor; cannot delete a category in use
+- [ ] All six demo accounts (Admin → Read Only) see appropriately gated UI (Read Only cannot see "Raise Issue")
+- [ ] Mock mode persists issues to localStorage on config; survives a page reload
+- [ ] No existing tests or existing register pages are broken
+
+---
+
+## Implementation Plan
+
+### Phase A — Foundation (data layer, no UI)
+*Must be done first; all UI phases depend on this.*
+
+1. `domain.ts` — add `Issue`, `IssueInput`, `IssueStatus`; add `linkedIssueRefs` to `Risk` + `ChangeRequest`
+2. `config.ts` — add `issueCategories` to `AppConfig`, `DEFAULT_CONFIG`, `sanitizeConfig`
+3. `lookups.ts` — add `ISSUE_STATUSES`
+4. `tokens.ts` — add `ISSUE_STATUS_STYLES`
+5. `services.ts` — add `IssueService`; extend `Services`
+6. `seed.ts` — add `SEED_ISSUES`; add `linkedIssueRefs: []` to existing seeds
+7. `mockServices.ts` — implement `IssueService` + `syncIssueLinks()`
+8. `httpServices.ts` — implement HTTP `IssueService`
+9. `AppData.tsx` — add `issues` state + all mutation callbacks
+
+**Gate:** `typecheck` + `build` pass. No UI yet.
+
+### Phase B — Core pages
+*Depend on Phase A.*
+
+10. `IssueRegister.tsx` — register page
+11. `IssueForm.tsx` — Add + Edit forms (wizard)
+12. `IssueDetail.tsx` — detail page with inline status update
+
+**Gate:** Can log, view, edit and archive an issue end-to-end.
+
+### Phase C — Integration
+*Depend on Phase B.*
+
+13. `App.tsx` — add lazy routes
+14. `Sidebar.tsx` — add Issues nav section
+15. `RiskDetail.tsx` — add Linked Issues section
+16. `ChangeDetail.tsx` — add Linked Issues section
+17. `SettingsPage.tsx` — add `issueCategories` editor
+
+**Gate:** Full end-to-end flow, bidirectional links visible, settings configurable.
+
+---
+
+## Task List
+
+### Phase A
+
+- [ ] **A1** — `domain.ts`: add `IssueStatus`, `Issue`, `IssueInput`; add `linkedIssueRefs: string[]` to `Risk` and `ChangeRequest`
+  - Acceptance: file compiles; existing Risk/ChangeRequest shapes are backward-compatible
+  - Verify: `npm run typecheck`
+  - Files: `src/types/domain.ts`
+
+- [ ] **A2** — `config.ts` + `lookups.ts` + `tokens.ts`: add `issueCategories`, `ISSUE_STATUSES`, `ISSUE_STATUS_STYLES`
+  - Acceptance: `DEFAULT_CONFIG` includes 8 default categories; `sanitizeConfig` handles missing/malformed `issueCategories`; `ISSUE_STATUS_STYLES` has entries for all three statuses
+  - Verify: `npm run typecheck`
+  - Files: `src/types/config.ts`, `src/types/lookups.ts`, `src/theme/tokens.ts`
+
+- [ ] **A3** — `services.ts`: add `IssueService` interface; extend `Services`
+  - Acceptance: interface covers list/get/create/update/archive/restore; `Services` type includes `issues`
+  - Verify: `npm run typecheck`
+  - Files: `src/api/services.ts`
+
+- [ ] **A4** — `seed.ts`: add `SEED_ISSUES` (4–6 realistic issues across statuses); add `linkedIssueRefs: []` to existing risk and change seeds
+  - Acceptance: seed issues use refs I001–I006; at least one links to R001 and C002; statuses cover Open/In Progress/Closed
+  - Verify: `npm run typecheck`
+  - Files: `src/api/mock/seed.ts`
+
+- [ ] **A5** — `mockServices.ts`: implement `IssueService` + `syncIssueLinks()`
+  - Acceptance: create/update calls `syncIssueLinks`; archive/restore toggle `archived`; ref generation uses `I` prefix; validation rejects empty title/owner
+  - Verify: `npm run typecheck` + `npm run build`
+  - Files: `src/api/mock/mockServices.ts`
+
+- [ ] **A6** — `httpServices.ts`: implement HTTP `IssueService`
+  - Acceptance: all six endpoints wired; auth headers included; 401 handling; timeout on every fetch
+  - Verify: `npm run typecheck`
+  - Files: `src/api/http/httpServices.ts`
+
+- [ ] **A7** — `AppData.tsx`: add `issues` state, `activeIssues` selector, mutation callbacks
+  - Acceptance: `issues`, `activeIssues` available from `useAppData()`; `createIssue`, `updateIssue`, `archiveIssue`, `restoreIssue` exposed; `refreshIssues` called after link changes
+  - Verify: `npm run typecheck` + `npm run build`
+  - Files: `src/store/AppData.tsx`
+
+### Phase B
+
+- [ ] **B1** — `IssueRegister.tsx`
+  - Acceptance: scope toggle; All/Open/In Progress/Closed tabs with counts; priority filter; sortable columns (ref, title, category, priority, status, owner, target date); pagination; CSV export; archived toggle; Restore button for archived rows; row click navigates to detail; skeleton rows while loading
+  - Verify: `npm run build`; manual smoke test
+  - Files: `src/pages/issues/IssueRegister.tsx`
+
+- [ ] **B2** — `IssueForm.tsx` (Add + Edit)
+  - Acceptance: 2-step wizard for Add (Step 1: info fields; Step 2: estimated cost + risk/change linker); single-page Edit; scope toggle clears linked refs; project picker filtered to pickerProjects; all required fields validated with onBlur errors; toast on success; redirects to detail
+  - Verify: `npm run build`; manual smoke test create + edit
+  - Files: `src/pages/issues/IssueForm.tsx`
+
+- [ ] **B3** — `IssueDetail.tsx`
+  - Acceptance: priority banner (colour-keyed); full attribute table; estimated cost card; inline status update (select + save, PATCH call); linked risks list (navigable); linked changes list (navigable); archive/restore actions with confirm dialog; archived banner; page title from issue ref
+  - Verify: `npm run build`; manual smoke test full detail flow
+  - Files: `src/pages/issues/IssueDetail.tsx`
+
+### Phase C
+
+- [ ] **C1** — `App.tsx`: add lazy routes for `/issues`, `/issues/new`, `/issues/:ref`, `/issues/:ref/edit`
+  - Acceptance: routes render correct pages; permission guard uses `risks:read` / `risks:update`; fallback to `/dashboard` for unknown routes still works
+  - Verify: `npm run build`; navigate to `/issues` in browser
+  - Files: `src/App.tsx`
+
+- [ ] **C2** — `Sidebar.tsx`: add Issues nav section
+  - Acceptance: "Issue Register" link (permission: `risks:read`); "Raise Issue" link (permission: `risks:update`); section active state; portfolio stats unchanged
+  - Verify: `npm run build`; sidebar renders for all demo accounts
+  - Files: `src/components/layout/Sidebar.tsx`
+
+- [ ] **C3** — `RiskDetail.tsx` + `ChangeDetail.tsx`: add Linked Issues section
+  - Acceptance: section appears below Linked Changes; lists issue ref, title, status pill, priority; row navigates to issue detail; "No linked issues" empty state
+  - Verify: `npm run build`; open R001 detail — should show I001
+  - Files: `src/pages/risks/RiskDetail.tsx`, `src/pages/changes/ChangeDetail.tsx`
+
+- [ ] **C4** — `SettingsPage.tsx`: add issueCategories editor
+  - Acceptance: `LookupListEditor` for `issueCategories` appears in the settings grid; usage count blocks deletion of in-use categories; saved with the rest of config
+  - Verify: `npm run build`; add + delete a category in Settings; save; reload
+  - Files: `src/pages/settings/SettingsPage.tsx`
+
+---
+
+## Open Questions
+
+None — all decisions confirmed in the preceding interview. This spec is ready for implementation.
+
+> Commit this file to `docs/spec-issues-module.md` before beginning Phase A.
