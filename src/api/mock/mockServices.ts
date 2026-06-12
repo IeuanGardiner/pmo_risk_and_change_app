@@ -7,6 +7,8 @@ import type {
   ChangeTransitionAction,
   CostProfile,
   Issue,
+  IssueInput,
+  IssueStatus,
   Project,
   ProjectInput,
   Rating,
@@ -23,6 +25,7 @@ import {
   calcLevel,
   calcScore,
   CLOSED_STATUS,
+  ISSUE_STATUSES,
   RISK_ACTION_STATUSES,
   RISK_EVENT_TYPES,
 } from "../../types/lookups";
@@ -36,7 +39,7 @@ import type {
   RiskService,
   Services,
 } from "../services";
-import { CURRENT_USER, PROJECTS, SEED_CHANGES, SEED_RISKS } from "./seed";
+import { CURRENT_USER, PROJECTS, SEED_CHANGES, SEED_ISSUES, SEED_RISKS } from "./seed";
 
 /* ============================================================================
    Mock implementation — in-memory store with simulated network latency so the
@@ -573,15 +576,97 @@ export function createMockServices(): Services {
     currentUser: () => delay(clone(CURRENT_USER)),
   };
 
-  // Stub — replaced by the full implementation in Task 5 (mockServices.ts A5).
-  let issueStore: Issue[] = [];
+  let issues: Issue[] = clone(SEED_ISSUES);
+
+  const patchIssue = (ref: string, patch: Partial<Issue>): Promise<Issue> => {
+    const existing = issues.find((i) => i.issueReference === ref);
+    if (!existing) return Promise.reject(new Error(`Issue ${ref} not found`));
+    const merged: Issue = { ...existing, ...patch, updatedAt: nowIso() };
+    issues = issues.map((i) => (i.issueReference === ref ? merged : i));
+    return delay(clone(merged));
+  };
+
+  /** Keep risk.linkedIssueRefs and change.linkedIssueRefs in step with
+      issue.linkedRiskRefs / issue.linkedChangeRefs.  Diffs old vs new so
+      removing a link removes the back-ref from the risk/change. */
+  function syncIssueLinks(
+    issueRef: string,
+    newRiskRefs: string[],
+    newChangeRefs: string[],
+    oldRiskRefs: string[] = [],
+    oldChangeRefs: string[] = [],
+  ): void {
+    risks = risks.map((r) => {
+      const wasLinked = oldRiskRefs.includes(r.riskReference);
+      const shouldLink = newRiskRefs.includes(r.riskReference);
+      if (shouldLink && !r.linkedIssueRefs.includes(issueRef)) {
+        return { ...r, linkedIssueRefs: [...r.linkedIssueRefs, issueRef] };
+      }
+      if (!shouldLink && wasLinked) {
+        return { ...r, linkedIssueRefs: r.linkedIssueRefs.filter((x) => x !== issueRef) };
+      }
+      return r;
+    });
+    changes = changes.map((c) => {
+      const wasLinked = oldChangeRefs.includes(c.changeReference);
+      const shouldLink = newChangeRefs.includes(c.changeReference);
+      if (shouldLink && !c.linkedIssueRefs.includes(issueRef)) {
+        return { ...c, linkedIssueRefs: [...c.linkedIssueRefs, issueRef] };
+      }
+      if (!shouldLink && wasLinked) {
+        return { ...c, linkedIssueRefs: c.linkedIssueRefs.filter((x) => x !== issueRef) };
+      }
+      return c;
+    });
+  }
+
   const issueService: IssueService = {
-    list: () => delay(clone(issueStore)),
-    get: (ref) => delay(clone(issueStore.find((i) => i.issueReference === ref) ?? null)),
-    create: () => Promise.reject(new Error("Issue service not yet initialised")),
-    update: () => Promise.reject(new Error("Issue service not yet initialised")),
-    archive: () => Promise.reject(new Error("Issue service not yet initialised")),
-    restore: () => Promise.reject(new Error("Issue service not yet initialised")),
+    list: () => delay(clone(issues)),
+    get: (ref) => delay(clone(issues.find((i) => i.issueReference === ref) ?? null)),
+    create: (input: IssueInput) => {
+      if (!input.title.trim()) return Promise.reject(new Error("Issue title is required"));
+      if (!input.owner.trim()) return Promise.reject(new Error("Issue owner is required"));
+      if (!ISSUE_STATUSES.includes(input.status as IssueStatus)) {
+        return Promise.reject(new Error(`Unknown issue status "${input.status}"`));
+      }
+      const rec: Issue = {
+        ...input,
+        issueReference: nextRef("I", issues.map((i) => i.issueReference)),
+        archived: false,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      issues = [...issues, rec];
+      syncIssueLinks(rec.issueReference, rec.linkedRiskRefs, rec.linkedChangeRefs);
+      return delay(clone(rec));
+    },
+    update: (ref, patch) => {
+      const existing = issues.find((i) => i.issueReference === ref);
+      if (!existing) return Promise.reject(new Error(`Issue ${ref} not found`));
+      if (patch.title !== undefined && !patch.title.trim()) {
+        return Promise.reject(new Error("Issue title is required"));
+      }
+      if (patch.owner !== undefined && !patch.owner.trim()) {
+        return Promise.reject(new Error("Issue owner is required"));
+      }
+      if (patch.status !== undefined && !ISSUE_STATUSES.includes(patch.status as IssueStatus)) {
+        return Promise.reject(new Error(`Unknown issue status "${patch.status}"`));
+      }
+      const merged: Issue = { ...existing, ...patch, updatedAt: nowIso() };
+      issues = issues.map((i) => (i.issueReference === ref ? merged : i));
+      if (patch.linkedRiskRefs || patch.linkedChangeRefs) {
+        syncIssueLinks(
+          ref,
+          patch.linkedRiskRefs ?? existing.linkedRiskRefs,
+          patch.linkedChangeRefs ?? existing.linkedChangeRefs,
+          existing.linkedRiskRefs,
+          existing.linkedChangeRefs,
+        );
+      }
+      return delay(clone(merged));
+    },
+    archive: (ref) => patchIssue(ref, { archived: true }),
+    restore: (ref) => patchIssue(ref, { archived: false }),
   };
 
   return {
