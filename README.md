@@ -120,6 +120,29 @@ To go live, copy `.env.example` to `.env` and set:
 VITE_API_BASE_URL=https://your-api.example.com
 ```
 
+`.env.example` contains commented placeholders for every environment variable
+the app currently reads or is designed to support:
+
+| Variable | Purpose |
+| --- | --- |
+| `VITE_API_BASE_URL` | API root; unset = mock mode |
+| `VITE_ENTRA_TENANT_ID` | Azure AD tenant (future `@azure/msal-browser` integration) |
+| `VITE_ENTRA_CLIENT_ID` | Azure AD app registration client ID |
+| `VITE_ENTRA_AUTHORITY` | MSAL authority URL |
+| `VITE_APPINSIGHTS_CONNECTION_STRING` | Azure Application Insights connection string |
+
+### HTTP layer behaviour
+
+The HTTP service implementation (`src/api/http/`) handles the following
+automatically — no additional work required in the app code:
+
+| Concern | Behaviour |
+| --- | --- |
+| **401 expired token** | Token is cleared from storage; a `riskshield:auth-expired` DOM event is dispatched; `AuthContext` responds by dropping the session and showing the sign-in page. No page reload required. |
+| **Request timeouts** | Every `fetch` carries `AbortSignal.timeout(30_000)` — requests that hang for more than 30 seconds are aborted. |
+| **Structured error bodies** | When the backend sends `{ "code": "...", "message": "..." }`, the `message` is extracted and surfaced in the error toast. Falls back to raw text for non-JSON bodies (e.g. proxy HTML error pages). |
+| **Auth header on uploads** | Logo upload (`POST /api/branding/logo`) includes the `Authorization: Bearer` header in addition to the multipart body. |
+
 ### REST contract
 
 All payload shapes are the TypeScript interfaces in `src/types/domain.ts` and
@@ -331,6 +354,61 @@ them only to shape the UI. Server-owned rules (the mock layer in
 
 `GET /api/me` (`AppUser`) is retained for compatibility, but
 `GET /api/auth/session` is the authoritative source for the signed-in user.
+
+## Recent improvements
+
+### June 2026 — code review follow-up
+
+Implemented all recommendations from the June 2026 code review
+(`docs/CODE_REVIEW.md`). Summary of changes:
+
+**Bugs fixed**
+- `uploadLogo` (`src/api/http/httpServices.ts`) now includes the
+  `Authorization: Bearer` header — uploads no longer return 401 against
+  authenticated backends.
+- `request()` JSON-parse failures now surface a descriptive error message
+  instead of a cryptic `Unexpected token <`.
+
+**Risk process: "Reduced" event type removed**
+- The draw-down ledger is now strictly `Realised | Released`. A downward
+  estimate revision is logged as a partial **Release** (consistent with
+  PMO/QSRA contingency-drawdown practice). The Reports "Reduced" column
+  became **Open Exposure**, which is directly actionable.
+
+**Performance**
+- **Bundle split**: recharts is extracted into its own chunk via
+  `build.rollupOptions.output.manualChunks`; all route-level page components
+  are loaded with `React.lazy` + `Suspense`. Initial JS chunk: 814 kB → 121 kB.
+- **ProjectsPage counts**: linked-record counts are now precomputed as two
+  `Map<projectId, count>` objects (one for risks, one for changes) rather
+  than filtering all records per project row (O(n × m) → O(n + m)).
+
+**Resilience**
+- **refreshRisks() guard**: a monotonic request-id counter ensures that when
+  two overlapping change mutations both trigger a risk refetch, only the
+  response from the most recent request updates the store.
+- **401 handling**: a 401 mid-session clears the auth token, dispatches a
+  `riskshield:auth-expired` DOM event, and `AuthContext` drops the session to
+  show the sign-in page — no page reload needed.
+- **Request timeouts**: `AbortSignal.timeout(30_000)` is attached to every
+  `fetch` call so hung requests are aborted after 30 seconds.
+- **Structured API errors**: the HTTP layer extracts `message` from
+  `{ code, message }` error bodies when the backend sends them, with a
+  raw-text fallback.
+
+**Documentation**
+- `.env.example` expanded with commented placeholders for
+  `VITE_ENTRA_TENANT_ID`, `VITE_ENTRA_CLIENT_ID`, `VITE_ENTRA_AUTHORITY`
+  (future MSAL integration) and `VITE_APPINSIGHTS_CONNECTION_STRING`
+  (Application Insights telemetry).
+
+**Deferred (dedicated future PRs)**
+- Dependency major upgrades (React 19, react-router 7, recharts 3, Vite 7+,
+  TypeScript 6) — zero vulnerabilities today; recharts 3 has API changes
+  that warrant a standalone upgrade PR.
+- `AppData` context split (data vs actions) — fine at current scale.
+- Microsoft Entra ID / MSAL token acquisition and silent refresh.
+- Azure Application Insights client telemetry.
 
 ## Project structure
 

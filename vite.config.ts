@@ -8,4 +8,15 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Recharts + d3 deps account for most of the 814 kB main chunk; split
+          // them so the shell loads faster on first paint.
+          recharts: ["recharts"],
+        },
+      },
+    },
+  },
 });

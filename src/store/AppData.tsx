@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -88,6 +89,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [user, setUser] = useState<AppUser | null>(null);
+  // Monotonic counter — incremented before each refreshRisks call so that only
+  // the response matching the most recent request updates state (guards against
+  // two overlapping mutations whose risk refetches interleave).
+  const refreshRisksSeq = useRef(0);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -139,8 +144,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       return exists ? prev.map((p) => (p.id === rec.id ? rec : p)) : [...prev, rec];
     });
 
-  /** Risk↔change links are bidirectional; refetch risks so both sides agree. */
-  const refreshRisks = async () => setRisks(await services.risks.list());
+  /** Risk↔change links are bidirectional; refetch risks so both sides agree.
+      The sequence guard ensures overlapping calls don't let a stale response
+      overwrite a fresher one (last-issued wins). */
+  const refreshRisks = async () => {
+    const seq = ++refreshRisksSeq.current;
+    const list = await services.risks.list();
+    if (seq === refreshRisksSeq.current) setRisks(list);
+  };
 
   const activeRisks = useMemo(() => risks.filter((r) => !r.archived), [risks]);
   const activeProjects = useMemo(() => projects.filter((p) => !p.archived), [projects]);

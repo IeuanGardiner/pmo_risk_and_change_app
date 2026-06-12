@@ -2,6 +2,8 @@ import type { Role, Session, User } from "../../types/auth";
 import type { AuthService, AuthServices, RoleAdminService, UserAdminService } from "../authServices";
 import { authHeaders, getAuthToken, setAuthToken } from "./authToken";
 
+const AUTH_EXPIRED_EVENT = "riskshield:auth-expired";
+
 /* ============================================================================
    HTTP auth implementation — talks to the real backend. Activated by setting
    VITE_API_BASE_URL. The endpoint contract is documented in README.md.
@@ -12,11 +14,24 @@ import { authHeaders, getAuthToken, setAuthToken } from "./authToken";
 async function request<V>(baseUrl: string, path: string, init?: RequestInit): Promise<V> {
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
+    signal: init?.signal ?? AbortSignal.timeout(30_000),
     headers: { "Content-Type": "application/json", ...authHeaders(), ...init?.headers },
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      setAuthToken(null);
+      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+    }
     const body = await res.text().catch(() => "");
-    throw new Error(`${init?.method ?? "GET"} ${path} failed (${res.status}): ${body}`);
+    const msg = (() => {
+      try {
+        const parsed = JSON.parse(body) as { message?: string };
+        return parsed.message ?? body;
+      } catch {
+        return body;
+      }
+    })();
+    throw new Error(`${init?.method ?? "GET"} ${path} failed (${res.status}): ${msg}`);
   }
   if (res.status === 204) return undefined as V;
   try {
