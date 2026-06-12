@@ -16,6 +16,8 @@ import type {
   ChangeInput,
   ChangeRequest,
   ChangeTransitionAction,
+  Issue,
+  IssueInput,
   Project,
   ProjectInput,
   Risk,
@@ -45,6 +47,10 @@ interface AppDataValue {
   activeProjects: Project[];
   /** Not archived and not Cancelled — the set offered in record pickers. */
   pickerProjects: Project[];
+  /** All issues, including archived. */
+  issues: Issue[];
+  /** Not archived — the live set for dashboards and registers. */
+  activeIssues: Issue[];
   config: AppConfig;
   user: AppUser | null;
   refresh: () => Promise<void>;
@@ -77,6 +83,10 @@ interface AppDataValue {
   updateProject: (id: string, patch: Partial<ProjectInput>) => Promise<Project>;
   archiveProject: (id: string) => Promise<Project>;
   restoreProject: (id: string) => Promise<Project>;
+  createIssue: (input: IssueInput) => Promise<Issue>;
+  updateIssue: (ref: string, patch: Partial<IssueInput>) => Promise<Issue>;
+  archiveIssue: (ref: string) => Promise<Issue>;
+  restoreIssue: (ref: string) => Promise<Issue>;
 }
 
 const AppDataContext = createContext<AppDataValue | null>(null);
@@ -87,12 +97,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [risks, setRisks] = useState<Risk[]>([]);
   const [changes, setChanges] = useState<ChangeRequest[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [user, setUser] = useState<AppUser | null>(null);
   // Monotonic counter — incremented before each refreshRisks call so that only
   // the response matching the most recent request updates state (guards against
   // two overlapping mutations whose risk refetches interleave).
   const refreshRisksSeq = useRef(0);
+  const refreshIssuesSeq = useRef(0);
   // Ref kept in sync with `changes` state so stable callbacks can read current
   // values without declaring `changes` as a dependency.
   const changesRef = useRef(changes);
@@ -102,10 +114,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const [riskList, changeList, projectList, cfg, currentUser] = await Promise.all([
+      const [riskList, changeList, projectList, issueList, cfg, currentUser] = await Promise.all([
         services.risks.list(),
         services.changes.list(),
         services.projects.list(),
+        services.issues.list(),
         services.config.get(),
         services.reference.currentUser(),
       ]);
@@ -113,6 +126,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setRisks(riskList);
       setChanges(changeList);
       setProjects(projectList);
+      setIssues(issueList);
       setConfig(cfg);
       setUser(currentUser);
     } catch (e) {
@@ -148,11 +162,26 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       return exists ? prev.map((p) => (p.id === rec.id ? rec : p)) : [...prev, rec];
     }), []);
 
+  const upsertIssue = useCallback((rec: Issue) =>
+    setIssues((prev) => {
+      const exists = prev.some((i) => i.issueReference === rec.issueReference);
+      return exists
+        ? prev.map((i) => (i.issueReference === rec.issueReference ? rec : i))
+        : [...prev, rec];
+    }), []);
+
   /** Risk↔change links are bidirectional; refetch risks so both sides agree. */
   const refreshRisks = useCallback(async () => {
     const seq = ++refreshRisksSeq.current;
     const list = await services.risks.list();
     if (seq === refreshRisksSeq.current) setRisks(list);
+  }, []);
+
+  /** Issue links are bidirectional; refetch risks+changes so all sides agree. */
+  const refreshIssues = useCallback(async () => {
+    const seq = ++refreshIssuesSeq.current;
+    const list = await services.issues.list();
+    if (seq === refreshIssuesSeq.current) setIssues(list);
   }, []);
 
   // Stable mutation callbacks extracted so consumers don't re-render on
@@ -290,12 +319,41 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return rec;
   }, [upsertProject]);
 
+  const createIssue = useCallback(async (input: IssueInput): Promise<Issue> => {
+    const rec = await services.issues.create(input);
+    upsertIssue(rec);
+    if (input.linkedRiskRefs.length) await refreshRisks();
+    if (input.linkedChangeRefs.length) await refreshIssues();
+    return rec;
+  }, [upsertIssue, refreshRisks, refreshIssues]);
+
+  const updateIssue = useCallback(async (ref: string, patch: Partial<IssueInput>): Promise<Issue> => {
+    const rec = await services.issues.update(ref, patch);
+    upsertIssue(rec);
+    if (patch.linkedRiskRefs) await refreshRisks();
+    if (patch.linkedChangeRefs) await refreshIssues();
+    return rec;
+  }, [upsertIssue, refreshRisks, refreshIssues]);
+
+  const archiveIssue = useCallback(async (ref: string): Promise<Issue> => {
+    const rec = await services.issues.archive(ref);
+    upsertIssue(rec);
+    return rec;
+  }, [upsertIssue]);
+
+  const restoreIssue = useCallback(async (ref: string): Promise<Issue> => {
+    const rec = await services.issues.restore(ref);
+    upsertIssue(rec);
+    return rec;
+  }, [upsertIssue]);
+
   const activeRisks = useMemo(() => risks.filter((r) => !r.archived), [risks]);
   const activeProjects = useMemo(() => projects.filter((p) => !p.archived), [projects]);
   const pickerProjects = useMemo(
     () => activeProjects.filter((p) => p.status !== "Cancelled"),
     [activeProjects],
   );
+  const activeIssues = useMemo(() => issues.filter((i) => !i.archived), [issues]);
 
   const value = useMemo<AppDataValue>(
     () => ({
@@ -307,6 +365,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       projects,
       activeProjects,
       pickerProjects,
+      issues,
+      activeIssues,
       config,
       user,
       refresh,
@@ -330,14 +390,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       updateProject,
       archiveProject,
       restoreProject,
+      createIssue,
+      updateIssue,
+      archiveIssue,
+      restoreIssue,
     }),
     [
       loading, error, risks, activeRisks, changes, projects, activeProjects, pickerProjects,
+      issues, activeIssues,
       config, user, refresh,
       createRisk, updateRisk, addRiskEvent, addRiskAction, updateRiskAction, deleteRiskAction,
       addRiskReview, closeRisk, archiveRisk, restoreRisk,
       createChange, updateChange, transitionChange, deleteChange, updateConfig, uploadLogo,
       createProject, updateProject, archiveProject, restoreProject,
+      createIssue, updateIssue, archiveIssue, restoreIssue,
     ],
   );
 
