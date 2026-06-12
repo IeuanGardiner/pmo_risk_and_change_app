@@ -1,0 +1,644 @@
+# Implementation Plan: Issues Module
+
+> Derived from: `docs/spec-issues-module.md`
+> Status: Ready for implementation
+
+---
+
+## Overview
+
+Build a configurable Issues module (problem log) across 17 tasks in 3 phases.
+The feature adds `Issue` as a first-class domain entity alongside `Risk` and
+`ChangeRequest`, with bidirectional links to both, a configurable category list
+in Settings, a full register + detail + form UI, and no new permissions (reuses
+`risks:*`).
+
+**Total files touched:** 17 (9 modified, 3 new pages, 5 modified pages/components)
+**Phases:** A = data layer (no UI), B = core pages, C = integration wiring
+
+---
+
+## Dependency Graph
+
+```
+Task 1 — domain.ts (types foundation)
+    │
+    ├── Task 2 — config / lookups / tokens     ─┐  parallel after T1
+    └── Task 3 — services.ts (IssueService)    ─┘
+                    │
+                    ├── Task 4 — seed.ts            ─┐  parallel after T3
+                    ├── Task 5 — mockServices.ts     │  (T5 needs T4)
+                    └── Task 6 — httpServices.ts    ─┘  parallel with T4+T5
+                                    │
+                                Task 7 — AppData.tsx  (needs T5 + T6)
+                                    │
+                         ┌──────────┼──────────┐
+                     Task 8      Task 9     Task 10    parallel after T7
+                  (Register)    (Form)     (Detail)
+                         └──────────┼──────────┘
+                                    │
+                                Task 11 — App.tsx routes
+                                    │
+                         ┌──────────┼──────────┐
+                     Task 12     Task 13    Task 14    parallel after T11
+                   (Sidebar)  (Risk+Change)  (Settings)
+```
+
+**Sequential constraints:**
+- T1 must be first — every other task imports from `domain.ts`
+- T5 must follow T4 — mock service initialises from `SEED_ISSUES`
+- T7 must follow both T5 and T6 — `AppData` composes both implementations
+- T11 must follow T8, T9, T10 — routes import the page components
+- T12, T13, T14 are independent of each other but all need T11
+
+---
+
+## Architecture Decisions
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Status change mechanism | Plain `PATCH` with `{ status }` | No approval chain needed; avoids a separate transition endpoint |
+| Permissions | Reuse `risks:read` / `risks:update` / `risks:archive` | Zero migration cost; all 6 existing roles work unchanged |
+| Cost field | Simple `estimatedCost: number` | No calendar profile needed; keeps the form lean |
+| Issue reference prefix | `I###` | Follows `R###` / `C###` convention; unambiguous in linked-ref lists |
+| Bidirectional sync | `syncIssueLinks()` in mock; server-enforced in HTTP | Mirrors existing `syncRiskLinks()` exactly |
+| Issue categories | `AppConfig.issueCategories` configurable in Settings | Same pattern as `riskStatuses`, `changeCategories` |
+| New page location | `src/pages/issues/` | Follows `src/pages/risks/` and `src/pages/changes/` layout |
+
+---
+
+## Task List
+
+### Phase A — Data Layer (no UI)
+
+---
+
+#### Task 1 — Domain types: `Issue`, `IssueInput`, `IssueStatus`; extend `Risk` + `ChangeRequest`
+
+**Description:** Lay the type foundation everything else compiles against. Add the
+`Issue` interface, `IssueInput` omit-type, and `IssueStatus` union. Also add
+`linkedIssueRefs: string[]` to the existing `Risk` and `ChangeRequest` interfaces.
+This is the highest-risk task because touching `Risk` and `ChangeRequest` cascades
+across the entire codebase — TypeScript strict mode will surface every place that
+constructs those objects without the new field.
+
+**Acceptance criteria:**
+- [ ] `IssueStatus`, `Issue`, `IssueInput` are exported from `domain.ts`
+- [ ] `Risk` has `linkedIssueRefs: string[]`
+- [ ] `ChangeRequest` has `linkedIssueRefs: string[]`
+- [ ] No existing type assertions or object literals are broken (typecheck confirms)
+
+**Verification:**
+- [ ] `npm run typecheck` — 0 errors (expect TS errors in seed.ts and mockServices.ts until T4/T5; resolve those in the same session)
+
+**Dependencies:** None
+
+**Files:**
+- `src/types/domain.ts`
+
+**Estimated scope:** S — 1 file, additive changes only
+
+---
+
+#### Task 2 — Config, lookups, tokens: `issueCategories`, `ISSUE_STATUSES`, `ISSUE_STATUS_STYLES`
+
+**Description:** Wire up the three support files that the rest of the feature reads
+from. `config.ts` gets `issueCategories` in `AppConfig`, `DEFAULT_CONFIG` (8 defaults),
+and `sanitizeConfig` (fallback to defaults when field is missing or malformed —
+critical for existing localStorage users upgrading). `lookups.ts` gets
+`ISSUE_STATUSES`. `tokens.ts` gets `ISSUE_STATUS_STYLES`.
+
+**Acceptance criteria:**
+- [ ] `AppConfig.issueCategories: string[]` defined
+- [ ] `DEFAULT_CONFIG.issueCategories` has exactly 8 entries
+- [ ] `sanitizeConfig` returns `DEFAULT_CONFIG.issueCategories` when input is missing, empty, or contains non-strings
+- [ ] `ISSUE_STATUSES: IssueStatus[]` exported from `lookups.ts`
+- [ ] `ISSUE_STATUS_STYLES` has entries for `"Open"`, `"In Progress"`, `"Closed"` using existing `T.*` tokens
+
+**Verification:**
+- [ ] `npm run typecheck` — 0 errors
+
+**Dependencies:** Task 1 (needs `IssueStatus` from `domain.ts`)
+
+**Files:**
+- `src/types/config.ts`
+- `src/types/lookups.ts`
+- `src/theme/tokens.ts`
+
+**Estimated scope:** S — 3 small additions across 3 files
+
+---
+
+#### Task 3 — Service interface: `IssueService`, extend `Services`
+
+**Description:** Define the `IssueService` interface in `services.ts` and add
+`issues: IssueService` to the `Services` aggregate. This is a pure interface — no
+implementation yet. Both the mock and HTTP implementations (T5, T6) will satisfy
+this contract, and `AppData` (T7) will consume it.
+
+**Acceptance criteria:**
+- [ ] `IssueService` interface exported with: `list`, `get`, `create`, `update`, `archive`, `restore`
+- [ ] `Services` interface includes `issues: IssueService`
+- [ ] All method signatures match the spec REST contract exactly
+
+**Verification:**
+- [ ] `npm run typecheck` — 0 errors (mock + http services will show errors until T5/T6)
+
+**Dependencies:** Task 1 (needs `Issue`, `IssueInput`)
+
+**Files:**
+- `src/api/services.ts`
+
+**Estimated scope:** XS — 1 file, ~30 lines added
+
+---
+
+#### Task 4 — Seed data: `SEED_ISSUES`, update `SEED_RISKS` + `SEED_CHANGES`
+
+**Description:** Add 5 realistic seed issues covering all three statuses and both
+scopes. At least one links to R001 and C002 to exercise bidirectional linking. Also
+add `linkedIssueRefs: []` to every existing entry in `SEED_RISKS` and
+`SEED_CHANGES` — required to satisfy the updated `Risk` and `ChangeRequest`
+interfaces from T1. Update the SEED_RISKS/SEED_CHANGES entries that are referenced
+by seed issues to include the correct issue ref in their `linkedIssueRefs`.
+
+**Seed issues to create:**
+| Ref | Title | Scope | Status | Priority | Links |
+|---|---|---|---|---|---|
+| I001 | Scaffold inspection record missing | Project | Open | Urgent | R001, C002 |
+| I002 | Zone D settlement monitoring gap | Project | In Progress | High | R002, C001 |
+| I003 | MEP drawing clash on Level 3 | Project | Open | Standard | — |
+| I004 | Fire suppression commissioning hold | Project | Closed | High | R003 |
+| I005 | Programme-wide cost data inconsistency | Program | In Progress | High | R012 |
+
+**Acceptance criteria:**
+- [ ] All `SEED_RISKS` entries have `linkedIssueRefs: string[]` (populated or empty)
+- [ ] All `SEED_CHANGES` entries have `linkedIssueRefs: string[]` (populated or empty)
+- [ ] `SEED_ISSUES` exported and contains 5 `Issue` objects with consistent cross-references
+- [ ] R001 seed has `linkedIssueRefs: ["I001"]`; C002 seed has `linkedIssueRefs: ["I001"]`
+
+**Verification:**
+- [ ] `npm run typecheck` — 0 errors
+
+**Dependencies:** Task 1 (Issue interface), Task 2 (IssueStatus, issueCategories for category values)
+
+**Files:**
+- `src/api/mock/seed.ts`
+
+**Estimated scope:** M — 1 file, significant additions + all seed updates
+
+---
+
+#### Task 5 — Mock implementation: `IssueService` + `syncIssueLinks()`
+
+**Description:** Implement the full in-memory `IssueService` in `mockServices.ts`.
+Initialise `let issues: Issue[] = clone(SEED_ISSUES)`. Implement all six methods
+following the exact patterns already used for `riskService` and `changeService`.
+Add `syncIssueLinks(issueRef, linkedRiskRefs, linkedChangeRefs)` which updates
+`risk.linkedIssueRefs` and `change.linkedIssueRefs` to mirror the new issue's
+links — this must handle both adding and removing refs when links change on update.
+Add `issues: issueService` to the returned `Services` object.
+
+**Key implementation rules:**
+- Reference generation: `nextRef("I", issues.map(i => i.issueReference))`
+- Validation: reject empty `title`, empty `owner`, invalid `status`
+- `syncIssueLinks` must diff old vs new links (not just append) so that removing
+  a link on edit correctly removes the back-ref from the risk/change
+- `archive`/`restore` are simple `patchIssue(ref, { archived: true/false })`
+
+**Acceptance criteria:**
+- [ ] `createIssue` returns new issue with `I###` ref and correct timestamps
+- [ ] `updateIssue` with `{ linkedRiskRefs: ["R001"] }` causes R001 to gain `"I001"` in `linkedIssueRefs`
+- [ ] Removing a risk link on update removes the back-ref from that risk
+- [ ] `archiveIssue` sets `archived: true`; issue disappears from `list()` filtered views
+- [ ] `restoreIssue` sets `archived: false`
+- [ ] Simulated 350ms latency matches other services
+
+**Verification:**
+- [ ] `npm run typecheck` — 0 errors
+- [ ] `npm run build` — clean
+
+**Dependencies:** Task 3 (interface), Task 4 (seed data)
+
+**Files:**
+- `src/api/mock/mockServices.ts`
+
+**Estimated scope:** M — 1 file, ~120 lines added
+
+---
+
+#### Task 6 — HTTP implementation: `IssueService` in `httpServices.ts`
+
+**Description:** Add the HTTP `IssueService` implementation to `httpServices.ts`
+following the identical pattern used for `risks` and `changes`. Wire all six
+endpoints. Include `authHeaders()`, `AbortSignal.timeout(30_000)`, 401 eviction,
+and structured `{ message }` error extraction on every call. Add `issues` to the
+returned `Services` object.
+
+**Acceptance criteria:**
+- [ ] All 6 endpoints implemented: list, get, create (POST), update (PATCH), archive (POST), restore (POST)
+- [ ] Every `fetch` call uses `authHeaders()` and `AbortSignal.timeout(30_000)`
+- [ ] 401 response clears token and dispatches `riskshield:auth-expired`
+- [ ] Non-JSON 2xx responses handled without crashing (unlikely for these endpoints but defensive)
+
+**Verification:**
+- [ ] `npm run typecheck` — 0 errors
+
+**Dependencies:** Task 3 (IssueService interface), Task 1 (Issue, IssueInput types)
+
+**Files:**
+- `src/api/http/httpServices.ts`
+
+**Estimated scope:** S — 1 file, ~50 lines added (pure boilerplate pattern)
+
+> ⚡ **Can run in parallel with Task 5** — mock and HTTP are independent implementations.
+
+---
+
+#### Task 7 — AppData: issues state, selectors, mutation callbacks
+
+**Description:** Extend `AppDataProvider` with issues. Add `let issues` state,
+`activeIssues` memo (non-archived), and all four mutation callbacks (`createIssue`,
+`updateIssue`, `archiveIssue`, `restoreIssue`) following the existing `upsertX`
+pattern. Add `issues.list()` to the initial `refresh()` `Promise.all`. Add a
+`refreshIssues` callback (monotonic seq ref guard, same as `refreshRisks`) and
+call it after any issue create/update that touches `linkedRiskRefs` or
+`linkedChangeRefs`. Extend `AppDataValue` interface and the memoised `value`
+object.
+
+**Acceptance criteria:**
+- [ ] `useAppData()` exposes `issues: Issue[]`, `activeIssues: Issue[]`
+- [ ] `useAppData()` exposes `createIssue`, `updateIssue`, `archiveIssue`, `restoreIssue`
+- [ ] Initial load fetches issues in the same `Promise.all` as risks/changes/projects
+- [ ] `createIssue` / `updateIssue` calls `refreshRisks()` when `linkedRiskRefs` is non-empty (mirrors change→risk sync pattern)
+- [ ] `npm run build` — clean (this is the gate for Phase A)
+
+**Verification:**
+- [ ] `npm run typecheck` — 0 errors
+- [ ] `npm run build` — 0 errors, bundle size increase < 2 kB (no new deps)
+
+**Dependencies:** Task 5, Task 6 (both implementations must satisfy `IssueService`)
+
+**Files:**
+- `src/store/AppData.tsx`
+
+**Estimated scope:** M — 1 file, ~80 lines added following established patterns
+
+---
+
+### ✅ Checkpoint A — Data layer complete
+
+Before proceeding to Phase B:
+- [ ] `npm run typecheck` passes with 0 errors
+- [ ] `npm run build` produces a clean bundle
+- [ ] `npm run dev` — app loads, existing Risk/Change dashboards render normally
+- [ ] No console errors on app boot (issues loaded from seed without crashing)
+- [ ] Verify in DevTools: `window.__appData` is not needed; just confirm no runtime errors
+
+---
+
+### Phase B — Core Pages
+
+> All three B tasks can run in parallel once Checkpoint A passes.
+
+---
+
+#### Task 8 — `IssueRegister.tsx`
+
+**Description:** Build the Issue Register page following the `RiskRegister` and
+`ChangeRegister` patterns exactly. Scope toggle (Project/Program), status tabs
+(All / Open / In Progress / Closed) with live counts, priority filter select,
+sortable columns via `useSortPage`, pagination, CSV export, "Show archived"
+toggle, skeleton rows while `dataLoading`, row click → navigate to detail,
+Restore button for archived rows (permission-gated `risks:archive`).
+
+**Columns:** `#` (ref), Title + category sub-line, Category, Priority, Status,
+Owner, Target Date, Project (Project scope only), `→` arrow.
+
+**ACCESSORS constant:**
+```typescript
+const ACCESSORS = {
+  ref:      (i: Issue) => i.issueReference,
+  title:    (i: Issue) => i.title,
+  category: (i: Issue) => i.category,
+  priority: (i: Issue) => ISSUE_PRIORITIES.indexOf(i.priority),
+  status:   (i: Issue) => i.status,
+  owner:    (i: Issue) => i.owner,
+  target:   (i: Issue) => i.targetResolutionDate,
+  updated:  (i: Issue) => i.updatedAt,
+} satisfies Record<string, (i: Issue) => string | number | null>;
+```
+
+**Acceptance criteria:**
+- [ ] Scope toggle filters issues correctly
+- [ ] Status tabs show correct counts; "All" tab is default
+- [ ] Priority filter works independently of status tab
+- [ ] Columns sort ascending/descending; default sort is `updated desc`
+- [ ] CSV export includes all fields from spec (including estimatedCost)
+- [ ] Archived issues hidden by default; shown when checkbox ticked
+- [ ] Restore button calls `restoreIssue`; toast confirms
+- [ ] `usePageTitle("Issue Register")` sets browser tab title
+- [ ] Skeleton rows appear while `loading === true`
+
+**Verification:**
+- [ ] `npm run build` — clean
+- [ ] Manual: load `/issues` in browser (after T11 routes exist; test with direct URL in HashRouter: `/#/issues`)
+
+**Dependencies:** Task 7 (AppData)
+
+**Files:**
+- `src/pages/issues/IssueRegister.tsx` *(new)*
+
+**Estimated scope:** M — 1 new file, ~280 lines (established register pattern)
+
+---
+
+#### Task 9 — `IssueForm.tsx` (Add wizard + Edit)
+
+**Description:** Two exported components: `AddIssue` (2-step wizard) and
+`EditIssue` (single-page). Follow `RiskForm.tsx` and `ChangeForm.tsx` patterns.
+
+**Step 1 — Info:** scope toggle, title, description, category (from
+`config.issueCategories`), priority, owner, raised by (defaults to
+`user?.name`), project picker (Project scope only), target resolution date.
+
+**Step 2 — Cost + Links:** estimated cost input (required, `> 0`),
+linked risks checklist (open risks in same scope — reuse `RiskLinker` pattern),
+linked changes checklist (open changes in same scope).
+
+**FormState** interface covers all fields as strings where needed (cost, dates).
+Validation: required fields shown on `onBlur`; cost validated on Step 2 submit.
+Scope toggle on Add clears linked refs (same as ChangeForm).
+
+**Acceptance criteria:**
+- [ ] "Back" on Step 2 returns to Step 1 with fields preserved
+- [ ] Next button on Step 1 disabled until required fields filled
+- [ ] Estimated cost field validates `> 0`
+- [ ] Linked risks / changes show only open records in the same scope
+- [ ] `createIssue` called on final submit; toast success; redirect to detail
+- [ ] `EditIssue` single-page; `updateIssue` on save; redirect to detail
+- [ ] `usePageTitle("Raise Issue")` / `usePageTitle(\`Edit \${ref}\`)`
+- [ ] Cancel on Add → `/issues`; Cancel on Edit → `/issues/:ref`
+
+**Verification:**
+- [ ] `npm run build` — clean
+- [ ] Manual: create an issue linking R001; verify R001 detail shows the back-link (after T11, T13)
+
+**Dependencies:** Task 7 (AppData)
+
+**Files:**
+- `src/pages/issues/IssueForm.tsx` *(new)*
+
+**Estimated scope:** M — 1 new file, ~340 lines
+
+---
+
+#### Task 10 — `IssueDetail.tsx`
+
+**Description:** Full issue detail page. Priority banner (colour from
+`PRIORITY_COLORS`, matching Change detail pattern). Attribute table (all fields).
+Estimated cost card. Inline status update: a `<Select>` showing current status;
+on change → `updateIssue(ref, { status: newValue })` → toast. Linked risks list
+(navigable rows, same pattern as ChangeDetail). Linked changes list. Archive /
+Restore actions with `ConfirmDialog`. Archived banner. Edit button →
+`/issues/:ref/edit`.
+
+**Attribute table rows:** Category, Priority, Status, Scope, Owner, Raised By,
+Project, Estimated Cost, Target Resolution, Linked Risks, Linked Changes.
+
+**Acceptance criteria:**
+- [ ] Banner colour matches priority (Urgent = `T.critical`, High = `T.high`, etc.)
+- [ ] Status `<Select>` calls `updateIssue` on change; no separate Save button needed
+- [ ] Each linked risk row navigates to `/risks/:ref`; each linked change navigates to `/changes/:ref`
+- [ ] Archive confirm dialog → `archiveIssue`; archived banner shown; Restore button appears
+- [ ] Edit button only visible with `risks:update` permission
+- [ ] Archive button only visible with `risks:archive` permission
+- [ ] "Back" button navigates to `/issues`
+- [ ] `usePageTitle(\`Issue \${ref}\`)` or "Issue not found"
+- [ ] "Issue not found" empty state if ref doesn't exist
+
+**Verification:**
+- [ ] `npm run build` — clean
+- [ ] Manual: open I001 detail; update status; verify status change reflects in register
+
+**Dependencies:** Task 7 (AppData)
+
+**Files:**
+- `src/pages/issues/IssueDetail.tsx` *(new)*
+
+**Estimated scope:** M — 1 new file, ~280 lines
+
+---
+
+### ✅ Checkpoint B — Core pages complete
+
+- [ ] `npm run build` — clean
+- [ ] `npm run dev` — navigate directly to `/#/issues`, `/#/issues/new`, `/#/issues/I001` (HashRouter accepts direct URLs)
+- [ ] Create an issue end-to-end: wizard → detail view → status change → archive → restore
+- [ ] Read-Only demo account: cannot see "Raise Issue" button; can see register + detail
+
+---
+
+### Phase C — Integration Wiring
+
+> T12, T13, T14 can all run in parallel once T11 is done.
+
+---
+
+#### Task 11 — `App.tsx`: lazy routes for issues pages
+
+**Description:** Add four lazy route imports and four `<Route>` elements, following
+the exact pattern of the risk and change routes. Permission guards use `risks:read`
+for read routes and `risks:update` for write routes.
+
+```typescript
+const IssueRegister = lazy(() =>
+  import("./pages/issues/IssueRegister").then(m => ({ default: m.IssueRegister })),
+);
+const IssueDetail = lazy(() =>
+  import("./pages/issues/IssueDetail").then(m => ({ default: m.IssueDetail })),
+);
+const AddIssue = lazy(() =>
+  import("./pages/issues/IssueForm").then(m => ({ default: m.AddIssue })),
+);
+const EditIssue = lazy(() =>
+  import("./pages/issues/IssueForm").then(m => ({ default: m.EditIssue })),
+);
+```
+
+**Route order matters:** `/issues/new` must appear before `/issues/:ref`.
+
+**Acceptance criteria:**
+- [ ] `/issues` → `IssueRegister`, guarded by `risks:read`
+- [ ] `/issues/new` → `AddIssue`, guarded by `risks:update`
+- [ ] `/issues/:ref` → `IssueDetail`, guarded by `risks:read`
+- [ ] `/issues/:ref/edit` → `EditIssue`, guarded by `risks:update`
+- [ ] Route `/issues/new` is not mistaken for a ref (order correct)
+- [ ] Catch-all `*` route still redirects to `/dashboard`
+- [ ] `Suspense` `<PageSkeleton />` fallback wraps all four routes (already handled by existing `<Suspense>` wrapper)
+
+**Verification:**
+- [ ] `npm run build` — clean; four new lazy chunks visible in build output
+- [ ] Manual: navigate each route; permission guard works for Read-Only account
+
+**Dependencies:** Task 8, Task 9, Task 10
+
+**Files:**
+- `src/App.tsx`
+
+**Estimated scope:** S — 1 file, ~20 lines added
+
+---
+
+#### Task 12 — `Sidebar.tsx`: Issues nav section
+
+**Description:** Add an "Issues" section to `NAV_SECTIONS` between Change and
+General. Two items: "Issue Register" (`/issues`, icon: `ClipboardCheck` or
+`AlertCircle` from lucide-react, permission: `risks:read`) and "Raise Issue"
+(`/issues/new`, icon: `PlusCircle`, permission: `risks:update`). Update the
+portfolio stats line at the bottom to include open issue count:
+`X open issues` alongside existing risk/change counts.
+
+**Acceptance criteria:**
+- [ ] "Issues" section appears in sidebar between Change and General
+- [ ] "Issue Register" visible to all roles with `risks:read`
+- [ ] "Raise Issue" hidden for Read-Only (no `risks:update`)
+- [ ] Section active-state highlights correctly when on an issue page
+- [ ] Portfolio stat line shows open (non-archived, non-Closed) issue count
+- [ ] Icon imported from `lucide-react` — no new dependency
+
+**Verification:**
+- [ ] `npm run build` — clean
+- [ ] Manual: sign in as each of the 6 demo accounts; check sidebar item visibility
+
+**Dependencies:** Task 11 (routes must exist before nav links are useful)
+
+**Files:**
+- `src/components/layout/Sidebar.tsx`
+
+**Estimated scope:** S — 1 file, ~25 lines added
+
+---
+
+#### Task 13 — `RiskDetail.tsx` + `ChangeDetail.tsx`: Linked Issues section
+
+**Description:** Add a "Linked Issues" card to each detail page, positioned below
+the existing "Linked Changes" / "Linked Risks" card respectively. Read
+`risk.linkedIssueRefs` / `change.linkedIssueRefs`, resolve against `issues` from
+`useAppData()`, and render a navigable list — identical pattern to the existing
+"Linked Changes" section in `RiskDetail`.
+
+**Row content:** issue ref (muted, bold), title (primary text, flex 1), estimated
+cost (money formatted), status pill (`ISSUE_STATUS_STYLES`), priority text.
+Empty state: "No linked issues."
+
+**Acceptance criteria:**
+- [ ] `RiskDetail` shows "Linked Issues" section; I001 appears on R001 detail
+- [ ] `ChangeDetail` shows "Linked Issues" section; I001 appears on C002 detail
+- [ ] Clicking a row navigates to `/issues/:ref`
+- [ ] Empty state renders when no linked issues
+- [ ] Section title: "Linked Issues" with sub: "Issues raised against this risk/change"
+
+**Verification:**
+- [ ] `npm run build` — clean
+- [ ] Manual: open R001 detail; confirm I001 appears; click through to IssueDetail
+
+**Dependencies:** Task 11 (route `/issues/:ref` must exist)
+
+**Files:**
+- `src/pages/risks/RiskDetail.tsx`
+- `src/pages/changes/ChangeDetail.tsx`
+
+**Estimated scope:** S — 2 files, ~25 lines each
+
+---
+
+#### Task 14 — `SettingsPage.tsx`: Issue categories editor
+
+**Description:** Add a `LookupListEditor` for `issueCategories` to the Settings
+page. Place it in the two-column grid alongside the existing category editors.
+The usage count function counts issues using each category value. Must be included
+in the `save()` flow (already handled — `draft` covers full `AppConfig`). The
+`issueCategories` list is protected: cannot delete a category that any issue
+currently uses.
+
+**Usage count function:**
+```typescript
+issueCategory: (v: string) => issues.filter(i => i.category === v).length,
+```
+
+**Acceptance criteria:**
+- [ ] "Issue categories" `LookupListEditor` appears in Settings grid
+- [ ] Usage count correctly prevents deletion of in-use categories
+- [ ] New categories persist after "Save Configuration" click
+- [ ] Config reload (page refresh in mock mode) restores custom categories
+- [ ] `issues` from `useAppData()` used for the usage count (not from any other source)
+
+**Verification:**
+- [ ] `npm run build` — clean
+- [ ] Manual: add "Procurement" category; save; create an issue using it; try to delete "Procurement" → blocked
+
+**Dependencies:** Task 11 (issues available via AppData; Settings itself doesn't need routes but integration test requires issues to exist)
+
+**Files:**
+- `src/pages/settings/SettingsPage.tsx`
+
+**Estimated scope:** S — 1 file, ~15 lines added
+
+---
+
+### ✅ Checkpoint C — Full feature complete
+
+- [ ] `npm run typecheck` — 0 errors
+- [ ] `npm run build` — clean; recharts chunk still split separately
+- [ ] All spec success criteria met (paste the 13 bullet list from spec and tick each)
+- [ ] Sign in as each of the 6 demo accounts; verify gated actions (raise, edit, archive)
+- [ ] Create I007 linking R002 and C004; verify back-links on R002 and C004 detail pages
+- [ ] Change I007 status Open → In Progress → Closed; verify register reflects immediately
+- [ ] Archive I007; confirm it disappears from register; restore; confirm it reappears
+- [ ] Settings: add "Procurement" category; save; create issue; try to delete — blocked
+- [ ] Hard-reload the mock app; issues persist (localStorage); config categories persist
+
+---
+
+## Parallelization Opportunities
+
+| After | Can run in parallel |
+|---|---|
+| Task 1 | Tasks 2 and 3 |
+| Task 3 | Tasks 4 and 6 (T5 needs T4 first) |
+| Task 5 + Task 6 | — (both needed before T7) |
+| Checkpoint A | Tasks 8, 9, 10 |
+| Checkpoint B (T11) | Tasks 12, 13, 14 |
+
+In a single-agent session run tasks sequentially in numbered order (1 → 14).
+With multiple agents or sessions, the table above identifies safe split points.
+
+---
+
+## Risks and Mitigations
+
+| Risk | Impact | Probability | Mitigation |
+|---|---|---|---|
+| `linkedIssueRefs` cascades to many files | High | High | Resolve all TS errors in Task 1 before moving on; do not skip the typecheck gate |
+| `sanitizeConfig` misses the new field | High | Medium | Test by loading the app with a stale localStorage config (clear `issueCategories` from the stored JSON manually in DevTools) |
+| `syncIssueLinks` diff logic incorrect | Medium | Medium | In Task 5, explicitly test: create with link, update to remove link, verify back-ref is removed |
+| Route order: `/issues/new` treated as ref | Medium | Low | Register `/issues/new` before `/issues/:ref` in `App.tsx`; verified by navigating to "Raise Issue" |
+| Portfolio stats line wraps on narrow sidebar | Low | Low | Test sidebar at default 230 px width; truncate with ellipsis if needed |
+| `AppData` memoised value grows stale | Low | Low | Follow `useCallback` + `upsertIssue` pattern exactly; do not inline closures in the memoised value |
+
+---
+
+## Implementation Order (single-session)
+
+```
+T1 → T2 → T3 → T4 → T5 → T6 → T7
+    [Checkpoint A]
+T8 → T9 → T10
+    [Checkpoint B]
+T11 → T12 → T13 → T14
+    [Checkpoint C]
+```
+
+Total estimated effort: **~1,700 lines** across 17 tasks
+(9 modified files + 3 new page files across 14 discrete tasks)
