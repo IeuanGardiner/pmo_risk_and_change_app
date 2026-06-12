@@ -56,6 +56,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // When the HTTP layer detects a 401 mid-session it dispatches this event so
+  // the UI drops back to the sign-in page without needing a page reload.
+  useEffect(() => {
+    const handle = () => setSession(null);
+    window.addEventListener("riskshield:auth-expired", handle);
+    return () => window.removeEventListener("riskshield:auth-expired", handle);
+  }, []);
+
   const signIn = useCallback(async (email: string, password: string) => {
     const s = await authServices.auth.signIn(email, password);
     setSession(s);

@@ -100,6 +100,19 @@ export function ProjectsPage() {
   const [confirmArchive, setConfirmArchive] = useState<Project | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  // Precomputed once per risks/changes change — avoids O(projects × records) per render.
+  const riskCountMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of risks) if (r.projectId) m.set(r.projectId, (m.get(r.projectId) ?? 0) + 1);
+    return m;
+  }, [risks]);
+
+  const changeCountMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of changes) if (c.projectId) m.set(c.projectId, (m.get(c.projectId) ?? 0) + 1);
+    return m;
+  }, [changes]);
+
   /* Counts cover every record (including archived) referencing the project. */
   const rows = useMemo<Row[]>(
     () =>
@@ -109,10 +122,10 @@ export function ProjectsPage() {
         .filter((p) => !typeFilter || p.type === typeFilter)
         .map((p) => ({
           ...p,
-          riskCount: risks.filter((r) => r.projectId === p.id).length,
-          changeCount: changes.filter((c) => c.projectId === p.id).length,
+          riskCount: riskCountMap.get(p.id) ?? 0,
+          changeCount: changeCountMap.get(p.id) ?? 0,
         })),
-    [projects, risks, changes, showArchived, statusFilter, typeFilter],
+    [projects, riskCountMap, changeCountMap, showArchived, statusFilter, typeFilter],
   );
 
   const { sorted, pageRows, sort, toggleSort, page, setPage, pageCount, pageSize, total } =

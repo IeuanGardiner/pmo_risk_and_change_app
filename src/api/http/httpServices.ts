@@ -8,7 +8,7 @@ import type {
   RiskService,
   Services,
 } from "../services";
-import { authHeaders } from "./authToken";
+import { authHeaders, setAuthToken } from "./authToken";
 
 /* ============================================================================
    HTTP implementation — talks to the real backend. Activated by setting
@@ -18,11 +18,26 @@ import { authHeaders } from "./authToken";
 async function request<V>(baseUrl: string, path: string, init?: RequestInit): Promise<V> {
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
+    signal: init?.signal ?? AbortSignal.timeout(30_000),
     headers: { "Content-Type": "application/json", ...authHeaders(), ...init?.headers },
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      // Token expired mid-session — evict it and signal the auth layer.
+      setAuthToken(null);
+      window.dispatchEvent(new CustomEvent("riskshield:auth-expired"));
+    }
     const body = await res.text().catch(() => "");
-    throw new Error(`${init?.method ?? "GET"} ${path} failed (${res.status}): ${body}`);
+    // Use structured { code, message } if the backend sends one.
+    const msg = (() => {
+      try {
+        const parsed = JSON.parse(body) as { message?: string };
+        return parsed.message ?? body;
+      } catch {
+        return body;
+      }
+    })();
+    throw new Error(`${init?.method ?? "GET"} ${path} failed (${res.status}): ${msg}`);
   }
   if (res.status === 204) return undefined as V;
   try {
@@ -120,12 +135,25 @@ export function createHttpServices(baseUrl: string): Services {
       form.append("logo", file);
       const res = await fetch(`${baseUrl}/api/branding/logo`, {
         method: "POST",
+        signal: AbortSignal.timeout(30_000),
         headers: { ...authHeaders() },
         body: form,
       });
       if (!res.ok) {
+        if (res.status === 401) {
+          setAuthToken(null);
+          window.dispatchEvent(new CustomEvent("riskshield:auth-expired"));
+        }
         const body = await res.text().catch(() => "");
-        throw new Error(`POST /api/branding/logo failed (${res.status}): ${body}`);
+        const msg = (() => {
+          try {
+            const parsed = JSON.parse(body) as { message?: string };
+            return parsed.message ?? body;
+          } catch {
+            return body;
+          }
+        })();
+        throw new Error(`POST /api/branding/logo failed (${res.status}): ${msg}`);
       }
       return (await res.json()) as { url: string };
     },

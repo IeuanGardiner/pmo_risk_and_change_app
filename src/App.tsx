@@ -1,27 +1,63 @@
+import { lazy, Suspense } from "react";
 import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, RequirePermission, useAuth } from "./auth/AuthContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/layout/Sidebar";
 import { ToastProvider } from "./components/Toast";
 import { Landing } from "./pages/Landing";
-import { ProjectsPage } from "./pages/admin/ProjectsPage";
-import { RolesPage } from "./pages/admin/RolesPage";
-import { UsersPage } from "./pages/admin/UsersPage";
 import { SignInPage } from "./pages/auth/SignInPage";
-import { ChangeDashboard } from "./pages/dashboard/ChangeDashboard";
-import { RiskDashboard } from "./pages/dashboard/RiskDashboard";
-import { ChangeDetail } from "./pages/changes/ChangeDetail";
-import { AddChange, EditChange } from "./pages/changes/ChangeForm";
-import { ChangeRegister } from "./pages/changes/ChangeRegister";
-import { Reports } from "./pages/reports/Reports";
-import { RiskDetail } from "./pages/risks/RiskDetail";
-import { AddRisk, EditRisk } from "./pages/risks/RiskForm";
-import { RiskRegister } from "./pages/risks/RiskRegister";
-import { SettingsPage } from "./pages/settings/SettingsPage";
 import { AppDataProvider, useAppData } from "./store/AppData";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { T } from "./theme/tokens";
 import type { Permission } from "./types/auth";
+
+// Route-level code splitting — keeps the initial bundle lean. Each chunk is
+// loaded on first navigation to that route and cached thereafter.
+const RiskDashboard = lazy(() =>
+  import("./pages/dashboard/RiskDashboard").then((m) => ({ default: m.RiskDashboard })),
+);
+const ChangeDashboard = lazy(() =>
+  import("./pages/dashboard/ChangeDashboard").then((m) => ({ default: m.ChangeDashboard })),
+);
+const RiskRegister = lazy(() =>
+  import("./pages/risks/RiskRegister").then((m) => ({ default: m.RiskRegister })),
+);
+const RiskDetail = lazy(() =>
+  import("./pages/risks/RiskDetail").then((m) => ({ default: m.RiskDetail })),
+);
+const AddRisk = lazy(() =>
+  import("./pages/risks/RiskForm").then((m) => ({ default: m.AddRisk })),
+);
+const EditRisk = lazy(() =>
+  import("./pages/risks/RiskForm").then((m) => ({ default: m.EditRisk })),
+);
+const ChangeRegister = lazy(() =>
+  import("./pages/changes/ChangeRegister").then((m) => ({ default: m.ChangeRegister })),
+);
+const ChangeDetail = lazy(() =>
+  import("./pages/changes/ChangeDetail").then((m) => ({ default: m.ChangeDetail })),
+);
+const AddChange = lazy(() =>
+  import("./pages/changes/ChangeForm").then((m) => ({ default: m.AddChange })),
+);
+const EditChange = lazy(() =>
+  import("./pages/changes/ChangeForm").then((m) => ({ default: m.EditChange })),
+);
+const ProjectsPage = lazy(() =>
+  import("./pages/admin/ProjectsPage").then((m) => ({ default: m.ProjectsPage })),
+);
+const Reports = lazy(() =>
+  import("./pages/reports/Reports").then((m) => ({ default: m.Reports })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
+const UsersPage = lazy(() =>
+  import("./pages/admin/UsersPage").then((m) => ({ default: m.UsersPage })),
+);
+const RolesPage = lazy(() =>
+  import("./pages/admin/RolesPage").then((m) => ({ default: m.RolesPage })),
+);
 
 function Shell() {
   const { loading, error, refresh, config } = useAppData();
@@ -57,6 +93,7 @@ function Shell() {
         <div style={{ flex: 1, overflow: "auto" }}>
           {/* Keyed by pathname so navigating away from a crashed view recovers. */}
           <ErrorBoundary key={location.pathname}>
+            <Suspense fallback={null}>
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={guarded("risks:read", <RiskDashboard />)} />
@@ -82,6 +119,7 @@ function Shell() {
               <Route path="/admin/roles" element={guarded("roles:manage", <RolesPage />)} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
+            </Suspense>
           </ErrorBoundary>
         </div>
       </div>
