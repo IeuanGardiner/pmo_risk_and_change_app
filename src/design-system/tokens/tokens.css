@@ -1,0 +1,121 @@
+/* ============================================================================
+   Design system CSS tokens.
+   New semantic names alias to the existing CSS custom properties declared in
+   src/index.css, so both the legacy token object (T.*) and the new ds-*
+   component classes resolve from the same runtime values. Accent shades and
+   theme-specific values update automatically when --brand / data-theme change.
+   ============================================================================ */
+
+/* --------------------------------------------------------------------------
+   Color aliases — map design-system names onto existing runtime variables
+   -------------------------------------------------------------------------- */
+:root {
+  --color-bg:      var(--bg);
+  --color-surface: var(--surface);
+  --color-text:    var(--text);
+  --color-muted:   var(--text-sec);
+  --color-border:  var(--stroke);
+
+  /* Accent shades derived from --brand (set per-deployment via applyThemeToDocument) */
+  --accent-500: var(--brand);
+  --accent-600: var(--brand-hover);
+  --accent-200: var(--brand-bg);
+
+  /* Semantic status colors */
+  --success: var(--low);
+  --warning: var(--medium);
+  --danger:  var(--critical);
+  --info:    var(--brand);
+
+  /* Status chip colors (scheme-aware) */
+  --critical-chip: var(--critical);
+  --high-chip:     var(--high);
+  --medium-chip:   var(--medium);
+  --low-chip:      var(--low);
+
+  /* --------------------------------------------------------------------------
+     Typography tokens
+     -------------------------------------------------------------------------- */
+  --font-family-base: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --type-xxl-size: 32px;
+  --type-xxl-line: 40px;
+  --type-xl-size:  24px;
+  --type-xl-line:  32px;
+  --type-lg-size:  18px;
+  --type-lg-line:  28px;
+  --type-md-size:  16px;
+  --type-md-line:  24px;
+  --type-sm-size:  14px;
+  --type-sm-line:  20px;
+  --type-xs-size:  12px;
+  --type-xs-line:  16px;
+
+  /* --------------------------------------------------------------------------
+     Spacing tokens
+     -------------------------------------------------------------------------- */
+  --space-xxs: 4px;
+  --space-xs:  8px;
+  --space-sm:  12px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  32px;
+  --space-xxl: 48px;
+
+  --container-max-width: 1280px;
+
+  /* --------------------------------------------------------------------------
+     Radius tokens
+     -------------------------------------------------------------------------- */
+  --radius-1:    6px;
+  --radius-2:    12px;
+  --radius-pill: 999px;
+
+  /* --------------------------------------------------------------------------
+     Elevation / shadow tokens
+     -------------------------------------------------------------------------- */
+  --shadow-1: var(--shadow-2);
+  --shadow-2: var(--shadow-8);
+  --shadow-3: 0 20px 40px rgba(11, 27, 43, 0.12);
+
+  /* --------------------------------------------------------------------------
+     Motion tokens
+     -------------------------------------------------------------------------- */
+  --motion-micro:      90ms;
+  --motion-standard:   200ms;
+  --motion-expressive: 360ms;
+
+  --easing-micro:      cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-standard:   cubic-bezier(0.2, 0.9, 0.2, 1);
+  --easing-expressive: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* --------------------------------------------------------------------------
+     Z-index tokens
+     -------------------------------------------------------------------------- */
+  --z-base:     0;
+  --z-card:     10;
+  --z-dropdown: 100;
+  --z-modal:    1000;
+  --z-toast:    1100;
+
+  /* --------------------------------------------------------------------------
+     Chart palette (colorblind-safe)
+     -------------------------------------------------------------------------- */
+  --chart-1: #2b8cff;
+  --chart-2: #ff7a59;
+  --chart-3: #ffd166;
+  --chart-4: #6fcf97;
+  --chart-5: #9b6bff;
+  --chart-6: #4db6ac;
+  --chart-7: #ffb86b;
+  --chart-8: #7f8c8d;
+}
+
+/* Respect reduced-motion preference globally */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
