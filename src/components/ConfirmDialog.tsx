@@ -56,7 +56,7 @@ export function ConfirmDialog({
       <Card
         style={{ maxWidth: 440, width: "100%", padding: 22, boxShadow: T.shadow8 }}
       >
-        <div onClick={(e) => e.stopPropagation()}>
+        <div role="document" onClick={(e) => e.stopPropagation()}>
           <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{title}</div>
           <div style={{ fontSize: 13, color: T.textSec, lineHeight: 1.6, marginTop: 8 }}>
             {message}

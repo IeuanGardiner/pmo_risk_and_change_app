@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search } from "lucide-react";
 import { T } from "../theme/tokens";
@@ -17,14 +17,22 @@ interface Hit {
   to: string;
 }
 
+export interface GlobalSearchHandle {
+  focus(): void;
+}
+
 const MAX_HITS = 8;
 
-export function GlobalSearch() {
+export const GlobalSearch = forwardRef<GlobalSearchHandle>(function GlobalSearch(_, ref) {
   const { risks, changes } = useAppData();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+  }));
 
   const hits = useMemo<Hit[]>(() => {
     const q = query.trim().toLowerCase();
@@ -103,6 +111,7 @@ export function GlobalSearch() {
           role="combobox"
           aria-expanded={hits.length > 0}
           aria-label="Search risks and changes"
+          aria-controls="global-search-results"
           placeholder="Search risks & changes…"
           value={query}
           onChange={(e) => {
@@ -126,6 +135,7 @@ export function GlobalSearch() {
       </div>
       {hits.length > 0 && (
         <div
+          id="global-search-results"
           role="listbox"
           style={{
             position: "absolute",
@@ -191,4 +201,4 @@ export function GlobalSearch() {
       )}
     </div>
   );
-}
+});

@@ -48,7 +48,7 @@ export function Modal({
       }}
     >
       <Card style={{ maxWidth: width, width: "100%", boxShadow: T.shadow8, maxHeight: "90vh", overflow: "auto" }}>
-        <div onClick={(e) => e.stopPropagation()} style={{ padding: 22 }}>
+        <div role="document" onClick={(e) => e.stopPropagation()} style={{ padding: 22 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{title}</div>
             <button

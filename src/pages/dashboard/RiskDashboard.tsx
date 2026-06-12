@@ -26,6 +26,7 @@ export function RiskDashboard() {
 
   const open = useMemo(() => activeRisks.filter((r) => r.status !== "Closed"), [activeRisks]);
   const [matrixView, setMatrixView] = useState<"current" | "target">("current");
+  const [attentionExpanded, setAttentionExpanded] = useState(false);
   const lastUpdated = activeRisks.reduce((a, r) => (r.updatedAt > a ? r.updatedAt : a), "");
 
   const kpis = useMemo(() => {
@@ -208,33 +209,48 @@ export function RiskDashboard() {
             All reviews, target dates and mitigation actions are up to date.
           </div>
         ) : (
-          attention.map(({ risk, reasons }) => (
-            <div
-              key={risk.riskReference}
-              className="rs-row"
-              onClick={() => navigate(`/risks/${risk.riskReference}`)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "9px 4px",
-                borderTop: `1px solid ${T.strokeSubtle}`,
-                cursor: "pointer",
-                fontSize: 13,
-              }}
-            >
-              <AlertTriangle size={15} style={{ color: T.critical, flexShrink: 0 }} />
-              <span style={{ color: T.textTer, fontWeight: 600 }}>{risk.riskReference}</span>
-              <span style={{ fontWeight: 600, color: T.text, flex: 1 }}>{risk.title}</span>
-              <span style={{ color: T.critical, fontWeight: 600, fontSize: 12 }}>
-                {reasons.join(" · ")}
-              </span>
-              <span style={{ color: T.textSec, fontSize: 12 }}>
-                Review {formatDate(risk.nextReviewDate)}
-              </span>
-              <Pill level={risk.level} small />
-            </div>
-          ))
+          <>
+            {(attentionExpanded ? attention : attention.slice(0, 5)).map(({ risk, reasons }) => (
+              <div
+                key={risk.riskReference}
+                className="rs-row"
+                onClick={() => navigate(`/risks/${risk.riskReference}`)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "9px 4px",
+                  borderTop: `1px solid ${T.strokeSubtle}`,
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                <AlertTriangle size={15} style={{ color: T.critical, flexShrink: 0 }} />
+                <span style={{ color: T.textTer, fontWeight: 600 }}>{risk.riskReference}</span>
+                <span style={{ fontWeight: 600, color: T.text, flex: 1 }}>{risk.title}</span>
+                <span style={{ color: T.critical, fontWeight: 600, fontSize: 12 }}>
+                  {reasons.join(" · ")}
+                </span>
+                <span style={{ color: T.textSec, fontSize: 12 }}>
+                  Review {formatDate(risk.nextReviewDate)}
+                </span>
+                <Pill level={risk.level} small />
+              </div>
+            ))}
+            {attention.length > 5 && (
+              <div style={{ marginTop: 10 }}>
+                <Btn
+                  variant="subtle"
+                  onClick={() => setAttentionExpanded((e) => !e)}
+                  style={{ fontSize: 12 }}
+                >
+                  {attentionExpanded
+                    ? "Show less"
+                    : `Show all ${attention.length}`}
+                </Btn>
+              </div>
+            )}
+          </>
         )}
       </Card>
 

@@ -95,6 +95,8 @@ export const Btn = ({
   disabled,
   loading,
   title,
+  type,
+  "aria-label": ariaLabel,
 }: {
   children?: ReactNode;
   onClick?: () => void;
@@ -105,6 +107,8 @@ export const Btn = ({
   /** Disables the button and shows an inline spinner while a mutation runs. */
   loading?: boolean;
   title?: string;
+  type?: React.ButtonHTMLAttributes<HTMLButtonElement>["type"];
+  "aria-label"?: string;
 }) => {
   const variants: Record<BtnVariant, CSSProperties> = {
     primary: { background: T.brand, color: "#fff", border: `1px solid ${T.brand}` },
@@ -120,6 +124,8 @@ export const Btn = ({
       onClick={onClick}
       disabled={isDisabled}
       title={title}
+      type={type}
+      aria-label={ariaLabel}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -236,6 +242,7 @@ export interface SelectOption {
 export const Select = ({
   value,
   onChange,
+  onBlur,
   options,
   placeholder,
   disabled,
@@ -244,6 +251,7 @@ export const Select = ({
 }: {
   value: string | number;
   onChange: (value: string) => void;
+  onBlur?: () => void;
   options: (SelectOption | string)[];
   /** When set, an empty "clear" option is offered; omit for required enums. */
   placeholder?: string;
@@ -258,6 +266,7 @@ export const Select = ({
       disabled={disabled}
       aria-invalid={ariaInvalid}
       onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
       style={{
         ...inputStyle,
         appearance: "none",
@@ -357,13 +366,13 @@ export const Pagination = ({
       </span>
       {pageCount > 1 && (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Btn variant="subtle" disabled={page === 0} onClick={() => onPage(page - 1)}>
+          <Btn variant="subtle" disabled={page === 0} onClick={() => onPage(page - 1)} aria-label="Go to previous page">
             Previous
           </Btn>
           <span style={{ fontWeight: 600 }}>
             Page {page + 1} of {pageCount}
           </span>
-          <Btn variant="subtle" disabled={page >= pageCount - 1} onClick={() => onPage(page + 1)}>
+          <Btn variant="subtle" disabled={page >= pageCount - 1} onClick={() => onPage(page + 1)} aria-label="Go to next page">
             Next
           </Btn>
         </div>

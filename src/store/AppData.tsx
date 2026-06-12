@@ -93,6 +93,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // the response matching the most recent request updates state (guards against
   // two overlapping mutations whose risk refetches interleave).
   const refreshRisksSeq = useRef(0);
+  // Ref kept in sync with `changes` state so stable callbacks can read current
+  // values without declaring `changes` as a dependency.
+  const changesRef = useRef(changes);
+  useEffect(() => { changesRef.current = changes; }, [changes]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -122,36 +126,169 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  const upsertRisk = (rec: Risk) =>
+  const upsertRisk = useCallback((rec: Risk) =>
     setRisks((prev) => {
       const exists = prev.some((r) => r.riskReference === rec.riskReference);
       return exists
         ? prev.map((r) => (r.riskReference === rec.riskReference ? rec : r))
         : [...prev, rec];
-    });
+    }), []);
 
-  const upsertChange = (rec: ChangeRequest) =>
+  const upsertChange = useCallback((rec: ChangeRequest) =>
     setChanges((prev) => {
       const exists = prev.some((c) => c.changeReference === rec.changeReference);
       return exists
         ? prev.map((c) => (c.changeReference === rec.changeReference ? rec : c))
         : [...prev, rec];
-    });
+    }), []);
 
-  const upsertProject = (rec: Project) =>
+  const upsertProject = useCallback((rec: Project) =>
     setProjects((prev) => {
       const exists = prev.some((p) => p.id === rec.id);
       return exists ? prev.map((p) => (p.id === rec.id ? rec : p)) : [...prev, rec];
-    });
+    }), []);
 
-  /** Risk↔change links are bidirectional; refetch risks so both sides agree.
-      The sequence guard ensures overlapping calls don't let a stale response
-      overwrite a fresher one (last-issued wins). */
-  const refreshRisks = async () => {
+  /** Risk↔change links are bidirectional; refetch risks so both sides agree. */
+  const refreshRisks = useCallback(async () => {
     const seq = ++refreshRisksSeq.current;
     const list = await services.risks.list();
     if (seq === refreshRisksSeq.current) setRisks(list);
-  };
+  }, []);
+
+  // Stable mutation callbacks extracted so consumers don't re-render on
+  // unrelated state changes.
+  const createRisk = useCallback(async (input: RiskInput): Promise<Risk> => {
+    const rec = await services.risks.create(input);
+    upsertRisk(rec);
+    return rec;
+  }, [upsertRisk]);
+
+  const updateRisk = useCallback(async (ref: string, patch: Partial<RiskInput>): Promise<Risk> => {
+    const rec = await services.risks.update(ref, patch);
+    upsertRisk(rec);
+    return rec;
+  }, [upsertRisk]);
+
+  const addRiskEvent = useCallback(async (ref: string, event: RiskEventInput): Promise<Risk> => {
+    const rec = await services.risks.addEvent(ref, event);
+    upsertRisk(rec);
+    return rec;
+  }, [upsertRisk]);
+
+  const addRiskAction = useCallback(async (ref: string, input: RiskActionInput): Promise<Risk> => {
+    const rec = await services.risks.addAction(ref, input);
+    upsertRisk(rec);
+    return rec;
+  }, [upsertRisk]);
+
+  const updateRiskAction = useCallback(async (
+    ref: string,
+    actionId: string,
+    patch: Partial<RiskActionInput>,
+  ): Promise<Risk> => {
+    const rec = await services.risks.updateAction(ref, actionId, patch);
+    upsertRisk(rec);
+    return rec;
+  }, [upsertRisk]);
+
+  const deleteRiskAction = useCallback(async (ref: string, actionId: string): Promise<Risk> => {
+    const rec = await services.risks.deleteAction(ref, actionId);
+    upsertRisk(rec);
+    return rec;
+  }, [upsertRisk]);
+
+  const addRiskReview = useCallback(async (ref: string, input: RiskReviewInput): Promise<Risk> => {
+    const rec = await services.risks.addReview(ref, input);
+    upsertRisk(rec);
+    return rec;
+  }, [upsertRisk]);
+
+  const closeRisk = useCallback(async (ref: string): Promise<Risk> => {
+    const rec = await services.risks.close(ref);
+    upsertRisk(rec);
+    return rec;
+  }, [upsertRisk]);
+
+  const archiveRisk = useCallback(async (ref: string): Promise<Risk> => {
+    const rec = await services.risks.archive(ref);
+    upsertRisk(rec);
+    return rec;
+  }, [upsertRisk]);
+
+  const restoreRisk = useCallback(async (ref: string): Promise<Risk> => {
+    const rec = await services.risks.restore(ref);
+    upsertRisk(rec);
+    return rec;
+  }, [upsertRisk]);
+
+  const createChange = useCallback(async (input: ChangeInput): Promise<ChangeRequest> => {
+    const rec = await services.changes.create(input);
+    upsertChange(rec);
+    if (input.linkedRiskRefs.length) await refreshRisks();
+    return rec;
+  }, [upsertChange, refreshRisks]);
+
+  const updateChange = useCallback(async (ref: string, patch: Partial<ChangeInput>): Promise<ChangeRequest> => {
+    const rec = await services.changes.update(ref, patch);
+    upsertChange(rec);
+    if (patch.linkedRiskRefs) await refreshRisks();
+    return rec;
+  }, [upsertChange, refreshRisks]);
+
+  const transitionChange = useCallback(async (
+    ref: string,
+    action: ChangeTransitionAction,
+    note?: string,
+    date?: string,
+  ): Promise<ChangeRequest> => {
+    const rec = await services.changes.transition(ref, action, note, date);
+    upsertChange(rec);
+    return rec;
+  }, [upsertChange]);
+
+  const deleteChange = useCallback(async (ref: string): Promise<void> => {
+    const hadLinks = changesRef.current.find((c) => c.changeReference === ref)?.linkedRiskRefs.length;
+    await services.changes.delete(ref);
+    setChanges((prev) => prev.filter((c) => c.changeReference !== ref));
+    if (hadLinks) await refreshRisks();
+  }, [refreshRisks]);
+
+  const updateConfig = useCallback(async (next: AppConfig): Promise<AppConfig> => {
+    const cfg = await services.config.update(next);
+    setCurrency(cfg.currency);
+    setConfig(cfg);
+    await refreshRisks();
+    return cfg;
+  }, [refreshRisks]);
+
+  const uploadLogo = useCallback(
+    (file: File) => services.config.uploadLogo(file),
+    [],
+  );
+
+  const createProject = useCallback(async (input: ProjectInput): Promise<Project> => {
+    const rec = await services.projects.create(input);
+    upsertProject(rec);
+    return rec;
+  }, [upsertProject]);
+
+  const updateProject = useCallback(async (id: string, patch: Partial<ProjectInput>): Promise<Project> => {
+    const rec = await services.projects.update(id, patch);
+    upsertProject(rec);
+    return rec;
+  }, [upsertProject]);
+
+  const archiveProject = useCallback(async (id: string): Promise<Project> => {
+    const rec = await services.projects.archive(id);
+    upsertProject(rec);
+    return rec;
+  }, [upsertProject]);
+
+  const restoreProject = useCallback(async (id: string): Promise<Project> => {
+    const rec = await services.projects.restore(id);
+    upsertProject(rec);
+    return rec;
+  }, [upsertProject]);
 
   const activeRisks = useMemo(() => risks.filter((r) => !r.archived), [risks]);
   const activeProjects = useMemo(() => projects.filter((p) => !p.archived), [projects]);
@@ -173,110 +310,35 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       config,
       user,
       refresh,
-      createRisk: async (input) => {
-        const rec = await services.risks.create(input);
-        upsertRisk(rec);
-        return rec;
-      },
-      updateRisk: async (ref, patch) => {
-        const rec = await services.risks.update(ref, patch);
-        upsertRisk(rec);
-        return rec;
-      },
-      addRiskEvent: async (ref, event) => {
-        const rec = await services.risks.addEvent(ref, event);
-        upsertRisk(rec);
-        return rec;
-      },
-      addRiskAction: async (ref, input) => {
-        const rec = await services.risks.addAction(ref, input);
-        upsertRisk(rec);
-        return rec;
-      },
-      updateRiskAction: async (ref, actionId, patch) => {
-        const rec = await services.risks.updateAction(ref, actionId, patch);
-        upsertRisk(rec);
-        return rec;
-      },
-      deleteRiskAction: async (ref, actionId) => {
-        const rec = await services.risks.deleteAction(ref, actionId);
-        upsertRisk(rec);
-        return rec;
-      },
-      addRiskReview: async (ref, input) => {
-        const rec = await services.risks.addReview(ref, input);
-        upsertRisk(rec);
-        return rec;
-      },
-      closeRisk: async (ref) => {
-        const rec = await services.risks.close(ref);
-        upsertRisk(rec);
-        return rec;
-      },
-      archiveRisk: async (ref) => {
-        const rec = await services.risks.archive(ref);
-        upsertRisk(rec);
-        return rec;
-      },
-      restoreRisk: async (ref) => {
-        const rec = await services.risks.restore(ref);
-        upsertRisk(rec);
-        return rec;
-      },
-      createChange: async (input) => {
-        const rec = await services.changes.create(input);
-        upsertChange(rec);
-        if (input.linkedRiskRefs.length) await refreshRisks();
-        return rec;
-      },
-      updateChange: async (ref, patch) => {
-        const rec = await services.changes.update(ref, patch);
-        upsertChange(rec);
-        if (patch.linkedRiskRefs) await refreshRisks();
-        return rec;
-      },
-      transitionChange: async (ref, action, note, date) => {
-        const rec = await services.changes.transition(ref, action, note, date);
-        upsertChange(rec);
-        return rec;
-      },
-      deleteChange: async (ref) => {
-        const hadLinks = changes.find((c) => c.changeReference === ref)?.linkedRiskRefs.length;
-        await services.changes.delete(ref);
-        setChanges((prev) => prev.filter((c) => c.changeReference !== ref));
-        if (hadLinks) await refreshRisks();
-      },
-      updateConfig: async (next) => {
-        const cfg = await services.config.update(next);
-        setCurrency(cfg.currency);
-        setConfig(cfg);
-        // A matrix change re-bands every stored risk server-side — refetch.
-        await refreshRisks();
-        return cfg;
-      },
-      uploadLogo: (file) => services.config.uploadLogo(file),
-      createProject: async (input) => {
-        const rec = await services.projects.create(input);
-        upsertProject(rec);
-        return rec;
-      },
-      updateProject: async (id, patch) => {
-        const rec = await services.projects.update(id, patch);
-        upsertProject(rec);
-        return rec;
-      },
-      archiveProject: async (id) => {
-        const rec = await services.projects.archive(id);
-        upsertProject(rec);
-        return rec;
-      },
-      restoreProject: async (id) => {
-        const rec = await services.projects.restore(id);
-        upsertProject(rec);
-        return rec;
-      },
+      createRisk,
+      updateRisk,
+      addRiskEvent,
+      addRiskAction,
+      updateRiskAction,
+      deleteRiskAction,
+      addRiskReview,
+      closeRisk,
+      archiveRisk,
+      restoreRisk,
+      createChange,
+      updateChange,
+      transitionChange,
+      deleteChange,
+      updateConfig,
+      uploadLogo,
+      createProject,
+      updateProject,
+      archiveProject,
+      restoreProject,
     }),
-    [loading, error, risks, activeRisks, changes, projects, activeProjects, pickerProjects, config, user, refresh],
+    [
+      loading, error, risks, activeRisks, changes, projects, activeProjects, pickerProjects,
+      config, user, refresh,
+      createRisk, updateRisk, addRiskEvent, addRiskAction, updateRiskAction, deleteRiskAction,
+      addRiskReview, closeRisk, archiveRisk, restoreRisk,
+      createChange, updateChange, transitionChange, deleteChange, updateConfig, uploadLogo,
+      createProject, updateProject, archiveProject, restoreProject,
+    ],
   );
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>;

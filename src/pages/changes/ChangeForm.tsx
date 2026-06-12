@@ -64,6 +64,17 @@ function toInput(f: FormState): ChangeInput {
   };
 }
 
+/** Step-1 info-field validation for per-field onBlur errors. */
+function validateChangeInfo(f: FormState): Record<string, string> {
+  const e: Record<string, string> = {};
+  if (!f.title.trim()) e.title = "Risk title is required";
+  if (!f.description.trim()) e.description = "Description is required";
+  if (!f.justification.trim()) e.justification = "Justification is required";
+  if (!f.category) e.category = "Category is required";
+  if (!f.owner.trim()) e.owner = "Owner is required";
+  return e;
+}
+
 /** Impact-step validation. */
 function validateImpact(f: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -135,12 +146,18 @@ function ChangeInfoFields({
   f,
   set,
   referenceLabel,
+  touched,
+  touch,
 }: {
   f: FormState;
   set: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
   referenceLabel: string;
+  touched: Set<string>;
+  touch: (k: string) => void;
 }) {
   const { pickerProjects, activeRisks, config } = useAppData();
+  const infoErrors = validateChangeInfo(f);
+  const infoErr = (k: string) => (touched.has(k) ? infoErrors[k] : undefined);
   const onToggleRisk = useCallback(
     (ref: string) =>
       set(
@@ -155,11 +172,12 @@ function ChangeInfoFields({
     <>
       <SubHead>Change Information</SubHead>
       <Grid2>
-        <Field label="Change Title" required>
+        <Field label="Change Title" required error={infoErr("title")}>
           <Input
             placeholder="Enter a concise change title…"
             value={f.title}
             onChange={(e) => set("title", e.target.value)}
+            onBlur={() => touch("title")}
           />
         </Field>
         <Field label="Change Reference">
@@ -167,20 +185,22 @@ function ChangeInfoFields({
         </Field>
       </Grid2>
       <div style={{ marginTop: 14 }}>
-        <Field label="Change Description" required>
+        <Field label="Change Description" required error={infoErr("description")}>
           <TextArea
             placeholder="Describe the proposed change and what it affects…"
             value={f.description}
             onChange={(e) => set("description", e.target.value)}
+            onBlur={() => touch("description")}
           />
         </Field>
       </div>
       <div style={{ marginTop: 14 }}>
-        <Field label="Justification / Reason" required>
+        <Field label="Justification / Reason" required error={infoErr("justification")}>
           <TextArea
             placeholder="Why is this change needed? What happens if it is not approved?"
             value={f.justification}
             onChange={(e) => set("justification", e.target.value)}
+            onBlur={() => touch("justification")}
           />
         </Field>
       </div>
@@ -188,12 +208,14 @@ function ChangeInfoFields({
       <Divider />
       <SubHead>Classification</SubHead>
       <Grid2>
-        <Field label="Category" required>
+        <Field label="Category" required error={infoErr("category")}>
           <Select
             value={f.category}
             onChange={(v) => set("category", v)}
+            onBlur={() => touch("category")}
             options={withCurrent(config.changeCategories, f.category)}
             placeholder="Select category…"
+            aria-invalid={touched.has("category") && !f.category ? true : undefined}
           />
         </Field>
         <Field label="Priority" required>
@@ -206,11 +228,12 @@ function ChangeInfoFields({
         <Field label="Raised By" required>
           <Input value={f.raisedBy} onChange={(e) => set("raisedBy", e.target.value)} />
         </Field>
-        <Field label="Change Owner" required>
+        <Field label="Change Owner" required error={infoErr("owner")}>
           <Input
             placeholder="Assign to team member…"
             value={f.owner}
             onChange={(e) => set("owner", e.target.value)}
+            onBlur={() => touch("owner")}
           />
         </Field>
         {f.scope === "Project" && (
@@ -387,6 +410,8 @@ export function AddChange() {
   const [step, setStep] = useState<1 | 2>(1);
   const [saving, setSaving] = useState(false);
   const [attempted, setAttempted] = useState(false);
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const touch = (k: string) => setTouched((prev) => new Set([...prev, k]));
   const [f, setF] = useState<FormState>(() => ({
     scope: "Project",
     title: "",
@@ -485,7 +510,7 @@ export function AddChange() {
               ))}
             </div>
 
-            <ChangeInfoFields f={f} set={set} referenceLabel={nextRef} />
+            <ChangeInfoFields f={f} set={set} referenceLabel={nextRef} touched={touched} touch={touch} />
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>
               <Btn variant="default" onClick={() => navigate("/changes")}>
@@ -530,6 +555,8 @@ export function EditChange() {
   usePageTitle(change ? `Edit ${change.changeReference}` : "Change not found");
   const [saving, setSaving] = useState(false);
   const [attempted, setAttempted] = useState(false);
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const touch = (k: string) => setTouched((prev) => new Set([...prev, k]));
   const [f, setF] = useState<FormState | null>(() =>
     change
       ? {
@@ -626,7 +653,7 @@ export function EditChange() {
       )}
 
       <Card style={{ padding: 26, maxWidth: 920 }}>
-        <ChangeInfoFields f={f} set={set} referenceLabel={change.changeReference} />
+        <ChangeInfoFields f={f} set={set} referenceLabel={change.changeReference} touched={touched} touch={touch} />
         <Divider />
         <ImpactFields f={f} set={set} errors={errors} />
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 }}>

@@ -73,6 +73,12 @@ export function RiskMatrix({
               return (
                 <div
                   key={likelihood}
+                  role="gridcell"
+                  aria-label={
+                    count > 0
+                      ? `${count} risk${count === 1 ? "" : "s"} at likelihood ${likelihood}, impact ${impact}`
+                      : `${level} risk: likelihood ${likelihood}, impact ${impact}, 0 risks`
+                  }
                   style={{
                     flex: 1,
                     aspectRatio: "1.4",
@@ -87,7 +93,7 @@ export function RiskMatrix({
                     <button
                       onClick={() => onPickCell?.(likelihood, impact)}
                       title={`${count} risk${count === 1 ? "" : "s"} — open in register`}
-                      aria-label={`${count} risk${count === 1 ? "" : "s"} at likelihood ${likelihood}, impact ${impact}`}
+                      aria-label={`${count} risk${count === 1 ? "" : "s"} at likelihood ${likelihood}, impact ${impact} — open in register`}
                       style={{
                         width: 30,
                         height: 30,

@@ -111,8 +111,8 @@ export function SignInPage() {
                 {error}
               </div>
             )}
-            {/* No onClick — the button submits the form (default type="submit"). */}
             <Btn
+              type="submit"
               variant="primary"
               icon={LogIn}
               loading={busy}
