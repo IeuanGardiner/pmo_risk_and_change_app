@@ -141,6 +141,7 @@ function toInput(f: FormState): RiskInput {
     mitigation: f.mitigation.trim(),
     comments: f.comments.trim(),
     linkedChangeRefs: [],
+    linkedIssueRefs: [],
   };
 }
 
