@@ -11,7 +11,7 @@ import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { alpha, LEVEL_STYLES, T } from "../../theme/tokens";
 import type { Rating, Risk, RiskLevel, Scope } from "../../types/domain";
-import { IMPACTS, LIKELIHOODS } from "../../types/lookups";
+import { IMPACTS, isOpenAction, LIKELIHOODS } from "../../types/lookups";
 import { downloadCsv } from "../../utils/csv";
 import { formatDate, isOverdue } from "../../utils/format";
 
@@ -105,12 +105,16 @@ export function RiskRegister() {
   const exportCsv = () =>
     downloadCsv(
       `risk-register-${scope.toLowerCase()}.csv`,
-      ["Reference", "Title", "Scope", "Category", "Workstream", "Level", "Score", "Likelihood", "Impact", "Target Likelihood", "Target Impact", "Target Score", "Target Level", "Proximity", "Schedule Impact Days", "Owner", "Status", "Target Date", "Next Review", "Project", "Profile Start", "Profile Months", "Estimated", "Realised", "Released", "Reduced", "Open Exposure", "Archived"],
+      ["Reference", "Title", "Scope", "Category", "Workstream", "Level", "Score", "Likelihood", "Impact", "Target Likelihood", "Target Impact", "Target Score", "Target Level", "Proximity", "Response Strategy", "Open Actions", "Overdue Actions", "Schedule Impact Days", "Owner", "Status", "Target Date", "Next Review", "Project", "Profile Start", "Profile Months", "Estimated", "Realised", "Released", "Reduced", "Open Exposure", "Archived"],
       sorted.map((r) => [
         r.riskReference, r.title, r.scope, r.category, r.workstream ?? "", r.level, r.score,
         LIKELIHOODS[r.likelihood], IMPACTS[r.impact],
         r.targetLikelihood ?? "", r.targetImpact ?? "", r.targetScore ?? "", r.targetLevel ?? "",
-        r.proximity ?? "", r.scheduleImpactDays,
+        r.proximity ?? "",
+        r.responseStrategy ?? "",
+        r.actions.filter(isOpenAction).length,
+        r.actions.filter((a) => isOpenAction(a) && isOverdue(a.dueDate)).length,
+        r.scheduleImpactDays,
         r.owner, r.status, r.targetDate ?? "",
         r.nextReviewDate ?? "",
         scope === "Project" ? projectName(r.projectId) : "",

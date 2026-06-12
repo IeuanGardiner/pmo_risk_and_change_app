@@ -132,6 +132,10 @@ All payload shapes are the TypeScript interfaces in `src/types/domain.ts` and
 | POST | `/api/risks` | `RiskInput` | `Risk` (server assigns reference, score, level, target score/level, timestamps) |
 | PATCH | `/api/risks/:ref` | `Partial<RiskInput>` | `Risk` |
 | POST | `/api/risks/:ref/events` | `RiskEventInput` | `Risk` (appends a ledger event, recomputes derived totals, optionally closes) |
+| POST | `/api/risks/:ref/actions` | `RiskActionInput` | `Risk` (appends a mitigation action; server assigns id and timestamps) |
+| PATCH | `/api/risks/:ref/actions/:actionId` | `Partial<RiskActionInput>` | `Risk` (merges the patch; stamps/clears `completedDate` on Complete transitions) |
+| DELETE | `/api/risks/:ref/actions/:actionId` | — | `Risk` (removes the action; 404 for an unknown id) |
+| POST | `/api/risks/:ref/reviews` | `RiskReviewInput` | `Risk` (appends a review, re-scores the risk, sets `nextReviewDate`) |
 | POST | `/api/risks/:ref/close` | — | `Risk` |
 | POST | `/api/risks/:ref/archive` | — | `Risk` |
 | POST | `/api/risks/:ref/restore` | — | `Risk` |
@@ -139,7 +143,7 @@ All payload shapes are the TypeScript interfaces in `src/types/domain.ts` and
 | GET | `/api/changes/:ref` | — | `ChangeRequest` |
 | POST | `/api/changes` | `ChangeInput` | `ChangeRequest` (created as `Draft` with initial history entry) |
 | PATCH | `/api/changes/:ref` | `Partial<ChangeInput>` | `ChangeRequest` |
-| POST | `/api/changes/:ref/transition` | `{ action, note? }` | `ChangeRequest` (server enforces the workflow + appends history) |
+| POST | `/api/changes/:ref/transition` | `{ action, note?, date? }` | `ChangeRequest` (server enforces the workflow + appends history; `date` is honoured only for `implement`) |
 | DELETE | `/api/changes/:ref` | — | 204 (Draft changes only) |
 | GET | `/api/projects` | — | `Project[]` (including archived) |
 | POST | `/api/projects` | `ProjectInput` | `Project` (server assigns id, `archived: false`, timestamps) |
@@ -191,10 +195,41 @@ in `src/api/mock/mockServices.ts`):
   an entry, recomputes these totals, and sets `status = "Closed"` when the event
   has `closeRisk: true`. The ledger is the source of truth — these totals are
   never written directly via create/update
+- **Mitigation actions** (`risk.actions`) are server-owned and excluded from
+  risk create/update payloads — they are maintained only via the action
+  endpoints (all of which require `risks:update`). The server assigns ids
+  (`R001-a1` pattern), stamps `createdAt`/`updatedAt`, and owns
+  `completedDate`: stamped with today's date when a status transitions **into**
+  `Complete` (or an action is created as `Complete`), cleared when it
+  transitions back out. `title` and `owner` must be non-empty; `dueDate`, when
+  set, must be `yyyy-mm-dd`. Every action mutation re-stamps the risk's
+  `updatedAt`
+- **Risk reviews** (`risk.reviews`) are server-owned, **append-only** (no
+  update/delete endpoints) and excluded from risk create/update payloads.
+  `POST /api/risks/:ref/reviews` requires `risks:update`; the server assigns
+  the id (`R001-rv1` pattern), stamps `reviewer` from the authenticated user,
+  snapshots `previousLikelihood`/`previousImpact` from the stored risk and
+  stamps `createdAt`. It then applies the re-score: the risk's
+  `likelihood`/`impact` become the review's values, `score`/`level` are
+  recomputed (target fields untouched) and `nextReviewDate` is set from the
+  payload. Validate `date` (`yyyy-mm-dd`), a non-empty `comment` and ratings
+  in 1–5
+- `AppConfig.reviewCadenceDays` (default 30, sanitised to a whole number
+  clamped 1–365) only drives the client-side default for the next review date
+  when a review is logged
 - `AppConfig.riskStatuses` is client-configurable; "Open" and "Closed" must
   always be present (the server sanitises the list to guarantee this)
 - Reference generation (`R###` / `C###`)
 - Change workflow transitions (legal moves in `TRANSITIONS`) and approval history
+- **Change impact areas**: `ChangeInput.impactAreas` entries must exist in
+  `AppConfig.changeImpactAreas` — but only **newly added** values are
+  validated; values already stored on the record are tolerated even if since
+  removed from config (mirroring the lookup leniency elsewhere)
+- `actualImplementationDate` is **server-owned** and excluded from
+  `ChangeInput`: it is set only by the `implement` transition (`date` from the
+  body, validated as `yyyy-mm-dd`, defaulting to today when omitted) and
+  cleared back to `null` by `reopen`. The `date` field is ignored for every
+  other action
 - `DELETE /api/changes/:ref` only for `Draft` status, and it must strip the
   reference from any linked risks' `linkedChangeRefs`
 - Keeping `risk.linkedChangeRefs` consistent with `change.linkedRiskRefs`

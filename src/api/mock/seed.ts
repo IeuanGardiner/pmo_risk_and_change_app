@@ -4,9 +4,13 @@ import type {
   Project,
   Rating,
   Risk,
+  RiskAction,
+  RiskActionStatus,
   RiskEvent,
   RiskEventType,
   RiskProximity,
+  RiskResponseStrategy,
+  RiskReview,
   RiskStatus,
   Scope,
 } from "../../types/domain";
@@ -82,6 +86,28 @@ interface EventSeed {
   closeRisk?: boolean;
 }
 
+interface ActionSeed {
+  title: string;
+  owner: string;
+  due?: string;
+  status: RiskActionStatus;
+  /** Only meaningful for Complete actions. */
+  completed?: string;
+  notes?: string;
+}
+
+interface ReviewSeed {
+  date: string;
+  comment: string;
+  /** Snapshot before the review. */
+  pl: Rating;
+  pi: Rating;
+  /** Assessment after the review. */
+  l: Rating;
+  i: Rating;
+  next: string | null;
+}
+
 interface RiskSeed {
   ref: string;
   scope: Scope;
@@ -102,6 +128,12 @@ interface RiskSeed {
   est: number;
   /** Draw-down ledger seed — released/realised/reduced now flow from events. */
   events?: EventSeed[];
+  /** Chosen response strategy. */
+  strategy?: RiskResponseStrategy;
+  /** Mitigation action plan seed. */
+  actions?: ActionSeed[];
+  /** Historical formal reviews (chronological). */
+  reviews?: ReviewSeed[];
   desc: string;
   mit: string;
   comments: string;
@@ -130,6 +162,16 @@ const riskSeed: RiskSeed[] = [
     comments: "Inspector sign-off required before next lift operation. Escalated to Site Manager on 25 Mar 2026.",
     created: "2026-01-10", start: "2026-01", months: 12, project: "prj-001",
     linkedChanges: ["C002"],
+    strategy: "Reduce",
+    actions: [
+      { title: "Install additional clamps and bracing on Level 4 panels", owner: "J. Hayes", due: "2026-04-15", status: "Complete", completed: "2026-04-12", notes: "Completed alongside the emergency bracing works after the wind event." },
+      { title: "Implement daily scaffold inspection regime", owner: "Site Team", due: "2026-05-30", status: "In Progress", notes: "Checklists issued; awaiting inspector sign-off of the regime." },
+      { title: "Sign off wind-speed cordon procedure", owner: "D. Morgan", due: "2026-07-10", status: "Not Started" },
+    ],
+    reviews: [
+      { date: "2026-03-15", comment: "Escalated after the March wind event — likelihood raised pending the revised scaffold design (C002).", pl: 4, pi: 5, l: 5, i: 5, next: "2026-05-20" },
+      { date: "2026-05-20", comment: "No change — bracing complete but the tied system scaffold is not yet installed. Hold at Critical.", pl: 5, pi: 5, l: 5, i: 5, next: "2026-06-20" },
+    ],
   },
   {
     ref: "R002", scope: "Project", title: "Ground subsidence Zone D",
@@ -146,6 +188,11 @@ const riskSeed: RiskSeed[] = [
     comments: "Weekly settlement monitoring reports circulated to the engineering review board.",
     created: "2026-01-15", start: "2026-02", months: 15, project: "prj-001",
     linkedChanges: ["C001"],
+    strategy: "Reduce",
+    actions: [
+      { title: "Commission additional ground investigation in Zone D", owner: "S. Patel", due: "2026-04-01", status: "Complete", completed: "2026-03-28" },
+      { title: "Present underpinning options appraisal to the engineering board", owner: "S. Patel", due: "2026-06-30", status: "In Progress", notes: "Mini-pile option preferred; costed under C001." },
+    ],
   },
   {
     ref: "R003", scope: "Project", title: "Fire suppression non-compliant",
@@ -161,6 +208,11 @@ const riskSeed: RiskSeed[] = [
     mit: "Replacement system specified; works scheduled for next shutdown window.",
     comments: "",
     created: "2026-01-20", start: "2026-02", months: 10, project: "prj-002",
+    strategy: "Reduce",
+    actions: [
+      { title: "Specify compliant replacement suppression system", owner: "J. Hayes", due: "2026-03-31", status: "Complete", completed: "2026-03-25" },
+      { title: "Programme replacement works into the next shutdown window", owner: "R. Singh", due: "2026-08-15", status: "Not Started" },
+    ],
   },
   {
     ref: "R004", scope: "Project", title: "Tower crane load limit risk",
@@ -185,6 +237,7 @@ const riskSeed: RiskSeed[] = [
     mit: "Board replacement ordered; daily thermographic checks.",
     comments: "",
     created: "2026-02-01", start: "2026-02", months: 9, project: "prj-002",
+    strategy: "Reduce",
   },
   {
     ref: "R006", scope: "Project", title: "Steel delivery delayed",
@@ -201,6 +254,10 @@ const riskSeed: RiskSeed[] = [
     comments: "Freight surcharge approved by commercial 12 Feb.",
     created: "2026-02-05", start: "2026-02", months: 12, project: "prj-001",
     linkedChanges: ["C003"],
+    strategy: "Reduce",
+    actions: [
+      { title: "Confirm delivery schedule with second steel supplier", owner: "M. Clarke", due: "2026-06-01", status: "In Progress", notes: "Awaiting final confirmation of the July delivery slots." },
+    ],
   },
   {
     ref: "R007", scope: "Project", title: "Highway access consent renewal",
@@ -214,6 +271,7 @@ const riskSeed: RiskSeed[] = [
     mit: "Renewal application submitted; weekly liaison with the authority.",
     comments: "",
     created: "2026-02-08", start: "2026-03", months: 10, project: "prj-002",
+    strategy: "Avoid",
   },
   {
     ref: "R008", scope: "Project", title: "Subcontractor insolvency – MEP",
@@ -225,6 +283,11 @@ const riskSeed: RiskSeed[] = [
     mit: "Credit monitoring in place; contingency tender prepared.",
     comments: "",
     created: "2026-02-14", start: "2026-03", months: 12, project: "prj-003",
+    strategy: "Transfer",
+    actions: [
+      { title: "Prepare contingency MEP tender package", owner: "P. Evans", due: "2026-08-01", status: "Not Started" },
+      { title: "Negotiate parent company guarantee", owner: "P. Evans", due: "2026-05-01", status: "Cancelled", notes: "Parent declined; superseded by the contingency tender route." },
+    ],
   },
   {
     ref: "R009", scope: "Project", title: "Concrete mix quality failure",
@@ -266,6 +329,13 @@ const riskSeed: RiskSeed[] = [
     mit: "Hedging strategy and indexed contracts under review with commercial.",
     comments: "",
     created: "2026-01-12", start: "2026-01", months: 24,
+    strategy: "Transfer",
+    actions: [
+      { title: "Agree hedging strategy with commercial", owner: "I. Gardiner", due: "2026-09-30", status: "Not Started" },
+    ],
+    reviews: [
+      { date: "2026-04-28", comment: "Energy indices eased over Q1 — likelihood reduced one band while the hedging strategy is agreed.", pl: 5, pi: 4, l: 4, i: 4, next: "2026-05-30" },
+    ],
   },
   {
     ref: "R012", scope: "Program", title: "Construction cost inflation",
@@ -281,6 +351,10 @@ const riskSeed: RiskSeed[] = [
     comments: "",
     created: "2026-01-18", start: "2026-01", months: 48,
     linkedChanges: ["C005"],
+    strategy: "Reduce",
+    reviews: [
+      { date: "2026-04-20", comment: "Q1 review — indices softening but exposure unchanged until the indexation mechanism (C005) lands. No re-score.", pl: 5, pi: 3, l: 5, i: 3, next: "2026-09-30" },
+    ],
   },
   {
     ref: "R013", scope: "Program", title: "Building-safety regulation changes",
@@ -295,6 +369,7 @@ const riskSeed: RiskSeed[] = [
     mit: "Horizon-scanning; scenario plans for alternative compliance routes.",
     comments: "",
     created: "2026-02-02", start: "2026-02", months: 30,
+    strategy: "Accept",
   },
   {
     ref: "R014", scope: "Program", title: "Global materials & shipping shortage",
@@ -305,6 +380,7 @@ const riskSeed: RiskSeed[] = [
     mit: "Early procurement and buffer stock for critical long-lead items.",
     comments: "",
     created: "2026-03-03", start: "2026-03", months: 24,
+    strategy: "Share",
   },
 ];
 
@@ -322,6 +398,33 @@ const buildEvents = (ref: string, seeds: EventSeed[] = []): RiskEvent[] =>
 
 const sumEvents = (events: RiskEvent[], type: RiskEventType): number =>
   events.filter((e) => e.type === type).reduce((a, e) => a + e.amount, 0);
+
+const buildActions = (ref: string, seeds: ActionSeed[] = []): RiskAction[] =>
+  seeds.map((a, idx) => ({
+    id: `${ref}-a${idx + 1}`,
+    title: a.title,
+    owner: a.owner,
+    dueDate: a.due ?? null,
+    status: a.status,
+    completedDate: a.status === "Complete" ? (a.completed ?? a.due ?? null) : null,
+    notes: a.notes ?? "",
+    createdAt: `${a.due ?? "2026-03-01"}T09:30:00Z`,
+    updatedAt: "2026-06-05T09:41:00Z",
+  }));
+
+const buildReviews = (ref: string, seeds: ReviewSeed[] = []): RiskReview[] =>
+  seeds.map((r, idx) => ({
+    id: `${ref}-rv${idx + 1}`,
+    date: r.date,
+    reviewer: CURRENT_USER.name,
+    comment: r.comment,
+    previousLikelihood: r.pl,
+    previousImpact: r.pi,
+    likelihood: r.l,
+    impact: r.i,
+    nextReviewDate: r.next,
+    createdAt: `${r.date}T10:00:00Z`,
+  }));
 
 export const SEED_RISKS: Risk[] = riskSeed.map((s) => {
   const events = buildEvents(s.ref, s.events);
@@ -354,6 +457,9 @@ export const SEED_RISKS: Risk[] = riskSeed.map((s) => {
     reducedTotal: sumEvents(events, "Reduced"),
     costProfile: evenProfile(s.est, s.start, s.months),
     events,
+    responseStrategy: s.strategy ?? null,
+    actions: buildActions(s.ref, s.actions),
+    reviews: buildReviews(s.ref, s.reviews),
     mitigation: s.mit,
     comments: s.comments,
     linkedChangeRefs: s.linkedChanges ?? [],
@@ -377,6 +483,10 @@ interface ChangeSeed {
   days: number;
   requiredBy: string | null;
   linkedRisks: string[];
+  impactAreas?: string[];
+  plannedImpl?: string;
+  /** Only meaningful for Implemented changes. */
+  actualImpl?: string;
   desc: string;
   just: string;
   created: string;
@@ -392,6 +502,7 @@ const changeSeed: ChangeSeed[] = [
     category: "Design", priority: "Urgent", status: "Under Review",
     raisedBy: "S. Patel", owner: "I. Gardiner", cost: 850_000, days: 30,
     requiredBy: "2026-05-01", linkedRisks: ["R002"],
+    impactAreas: ["Design", "Cost", "Schedule"],
     desc: "Adopt mini-pile underpinning for the warehouse slab foundation following ground investigation results in Zone D.",
     just: "Settlement readings exceed tolerance; without intervention the foundation programme stops and R002 is likely to be realised in full.",
     created: "2026-03-02", start: "2026-04", months: 8, project: "prj-001",
@@ -406,6 +517,7 @@ const changeSeed: ChangeSeed[] = [
     category: "Scope", priority: "Urgent", status: "Approved",
     raisedBy: "J. Hayes", owner: "D. Morgan", cost: 240_000, days: 10,
     requiredBy: "2026-04-01", linkedRisks: ["R001"],
+    impactAreas: ["Scope", "Health & Safety", "Cost"], plannedImpl: "2026-05-15",
     desc: "Replace existing scaffold with a tied system scaffold including additional bracing and wind-load rated panels.",
     just: "Directly mitigates the critical scaffolding collapse risk (R001). Cost is funded from the released risk allowance.",
     created: "2026-03-10", start: "2026-04", months: 4, project: "prj-001",
@@ -421,6 +533,7 @@ const changeSeed: ChangeSeed[] = [
     category: "Cost", priority: "High", status: "Implemented",
     raisedBy: "M. Clarke", owner: "M. Clarke", cost: 180_000, days: -15,
     requiredBy: "2026-02-20", linkedRisks: ["R006"],
+    impactAreas: ["Cost", "Schedule"], plannedImpl: "2026-03-01", actualImpl: "2026-03-05",
     desc: "Engage second structural steel supplier with expedited freight to recover programme slippage.",
     just: "Recovers 15 days of critical-path float and prevents knock-on delay costs estimated at over three times this change's value.",
     created: "2026-02-10", start: "2026-02", months: 3, project: "prj-001",
@@ -437,6 +550,7 @@ const changeSeed: ChangeSeed[] = [
     category: "Design", priority: "Standard", status: "Submitted",
     raisedBy: "R. Singh", owner: "S. Patel", cost: 95_000, days: 5,
     requiredBy: "2026-06-15", linkedRisks: [],
+    impactAreas: ["Design", "Quality"],
     desc: "Re-orientate the main plant room to simplify cable routes and improve maintenance access.",
     just: "Reduces lifetime operating cost and removes a clash with the future services corridor.",
     created: "2026-03-20", start: "2026-05", months: 6, project: "prj-002",
@@ -450,6 +564,7 @@ const changeSeed: ChangeSeed[] = [
     category: "Cost", priority: "High", status: "Under Review",
     raisedBy: "I. Gardiner", owner: "I. Gardiner", cost: 1_200_000, days: 0,
     requiredBy: "2026-09-30", linkedRisks: ["R012"],
+    impactAreas: ["Cost", "Commercial / Contract"],
     desc: "Introduce CPI-linked indexation across delivery partner contracts.",
     just: "Caps inflation exposure currently tracked under R012 and gives cost certainty for re-baselining.",
     created: "2026-03-15", start: "2026-07", months: 24,
@@ -464,6 +579,7 @@ const changeSeed: ChangeSeed[] = [
     category: "Schedule", priority: "Standard", status: "Rejected",
     raisedBy: "T. Walsh", owner: "T. Walsh", cost: 130_000, days: -8,
     requiredBy: "2026-05-10", linkedRisks: [],
+    impactAreas: ["Schedule", "Environment"],
     desc: "Add night-shift working to accelerate the bridge-deck tie-in ahead of the road-closure window.",
     just: "Would recover 8 days, but consent constraints make night working impractical.",
     created: "2026-03-08", start: "2026-04", months: 3, project: "prj-002",
@@ -479,6 +595,7 @@ const changeSeed: ChangeSeed[] = [
     category: "Process", priority: "High", status: "Draft",
     raisedBy: "P. Evans", owner: "P. Evans", cost: 410_000, days: 0,
     requiredBy: "2026-07-01", linkedRisks: ["R008"],
+    impactAreas: ["Cost", "Commercial / Contract"],
     desc: "Bring forward procurement of transformers and switchgear into Q2 with staged payments.",
     just: "Secures supply slots before market lead times extend further; reduces exposure under R008.",
     created: "2026-03-25", start: "2026-04", months: 8, project: "prj-003",
@@ -489,6 +606,7 @@ const changeSeed: ChangeSeed[] = [
     category: "Process", priority: "Low", status: "Approved",
     raisedBy: "I. Gardiner", owner: "Programme Office", cost: -650_000, days: 0,
     requiredBy: null, linkedRisks: [],
+    impactAreas: ["Design", "Quality", "Cost"], plannedImpl: "2026-07-01",
     desc: "Adopt the standard product design library across all programme schemes from Q3.",
     just: "Net saving across the programme via repeatable design; reduces design risk on future schemes.",
     created: "2026-02-25", start: "2026-07", months: 18,
@@ -518,6 +636,9 @@ export const SEED_CHANGES: ChangeRequest[] = changeSeed.map((s) => ({
   projectId: s.scope === "Project" ? (s.project ?? PROJECTS[0].id) : null,
   linkedRiskRefs: s.linkedRisks,
   approvalHistory: s.history,
+  impactAreas: s.impactAreas ?? [],
+  plannedImplementationDate: s.plannedImpl ?? null,
+  actualImplementationDate: s.status === "Implemented" ? (s.actualImpl ?? null) : null,
   requiredBy: s.requiredBy,
   createdAt: `${s.created}T09:00:00Z`,
   updatedAt: s.history[s.history.length - 1]?.date ?? `${s.created}T09:00:00Z`,

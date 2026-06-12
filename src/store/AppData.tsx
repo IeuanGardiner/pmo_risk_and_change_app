@@ -18,8 +18,10 @@ import type {
   Project,
   ProjectInput,
   Risk,
+  RiskActionInput,
   RiskEventInput,
   RiskInput,
+  RiskReviewInput,
 } from "../types/domain";
 import { setCurrency } from "../utils/format";
 
@@ -48,6 +50,14 @@ interface AppDataValue {
   createRisk: (input: RiskInput) => Promise<Risk>;
   updateRisk: (ref: string, patch: Partial<RiskInput>) => Promise<Risk>;
   addRiskEvent: (ref: string, event: RiskEventInput) => Promise<Risk>;
+  addRiskAction: (ref: string, input: RiskActionInput) => Promise<Risk>;
+  updateRiskAction: (
+    ref: string,
+    actionId: string,
+    patch: Partial<RiskActionInput>,
+  ) => Promise<Risk>;
+  deleteRiskAction: (ref: string, actionId: string) => Promise<Risk>;
+  addRiskReview: (ref: string, input: RiskReviewInput) => Promise<Risk>;
   closeRisk: (ref: string) => Promise<Risk>;
   archiveRisk: (ref: string) => Promise<Risk>;
   restoreRisk: (ref: string) => Promise<Risk>;
@@ -57,6 +67,7 @@ interface AppDataValue {
     ref: string,
     action: ChangeTransitionAction,
     note?: string,
+    date?: string,
   ) => Promise<ChangeRequest>;
   deleteChange: (ref: string) => Promise<void>;
   updateConfig: (next: AppConfig) => Promise<AppConfig>;
@@ -166,6 +177,26 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         upsertRisk(rec);
         return rec;
       },
+      addRiskAction: async (ref, input) => {
+        const rec = await services.risks.addAction(ref, input);
+        upsertRisk(rec);
+        return rec;
+      },
+      updateRiskAction: async (ref, actionId, patch) => {
+        const rec = await services.risks.updateAction(ref, actionId, patch);
+        upsertRisk(rec);
+        return rec;
+      },
+      deleteRiskAction: async (ref, actionId) => {
+        const rec = await services.risks.deleteAction(ref, actionId);
+        upsertRisk(rec);
+        return rec;
+      },
+      addRiskReview: async (ref, input) => {
+        const rec = await services.risks.addReview(ref, input);
+        upsertRisk(rec);
+        return rec;
+      },
       closeRisk: async (ref) => {
         const rec = await services.risks.close(ref);
         upsertRisk(rec);
@@ -193,8 +224,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (patch.linkedRiskRefs) await refreshRisks();
         return rec;
       },
-      transitionChange: async (ref, action, note) => {
-        const rec = await services.changes.transition(ref, action, note);
+      transitionChange: async (ref, action, note, date) => {
+        const rec = await services.changes.transition(ref, action, note, date);
         upsertChange(rec);
         return rec;
       },
