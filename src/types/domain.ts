@@ -185,6 +185,7 @@ export interface Risk {
   mitigation: string;
   comments: string;
   linkedChangeRefs: string[];
+  linkedIssueRefs: string[];
   /** Soft-deleted; hidden from dashboards and default register views. */
   archived: boolean;
   /** ISO datetime. */
@@ -257,6 +258,7 @@ export interface ChangeRequest {
   scheduleImpactDays: number;
   projectId: string | null;
   linkedRiskRefs: string[];
+  linkedIssueRefs: string[];
   approvalHistory: ChangeApprovalEvent[];
   /** What the change affects (from config.changeImpactAreas); may be empty. */
   impactAreas: string[];
@@ -317,3 +319,41 @@ export interface AppUser {
   name: string;
   role: string;
 }
+
+/* --------------------------------- Issue --------------------------------- */
+
+export type IssueStatus = "Open" | "In Progress" | "Closed";
+
+export interface Issue {
+  /** Server-assigned: "I001", "I002", … */
+  issueReference: string;
+  scope: Scope;
+  title: string;
+  description: string;
+  /** From config.issueCategories. */
+  category: string;
+  /** Reuses the same priority levels as ChangeRequest. */
+  priority: ChangePriority;
+  status: IssueStatus;
+  owner: string;
+  raisedBy: string;
+  /** null for Program scope. */
+  projectId: string | null;
+  /** Simple monetary estimate — no calendar profile. */
+  estimatedCost: number;
+  /** ISO date yyyy-mm-dd or null. */
+  targetResolutionDate: string | null;
+  linkedRiskRefs: string[];
+  linkedChangeRefs: string[];
+  /** Soft-deleted; hidden from the default register view. */
+  archived: boolean;
+  /** ISO datetime, server-owned. */
+  createdAt: string;
+  /** ISO datetime, server-owned. */
+  updatedAt: string;
+}
+
+export type IssueInput = Omit<
+  Issue,
+  "issueReference" | "archived" | "createdAt" | "updatedAt"
+>;

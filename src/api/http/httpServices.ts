@@ -1,8 +1,9 @@
 import type { AppConfig } from "../../types/config";
-import type { AppUser, ChangeRequest, Project, Risk } from "../../types/domain";
+import type { AppUser, ChangeRequest, Issue, Project, Risk } from "../../types/domain";
 import type {
   ChangeService,
   ConfigService,
+  IssueService,
   ProjectService,
   ReferenceService,
   RiskService,
@@ -163,5 +164,21 @@ export function createHttpServices(baseUrl: string): Services {
     currentUser: () => api<AppUser>("/api/me"),
   };
 
-  return { risks, changes, projects, config, reference };
+  const issues: IssueService = {
+    list: () => api<Issue[]>("/api/issues"),
+    get: (ref) => api<Issue | null>(`/api/issues/${encodeURIComponent(ref)}`),
+    create: (input) =>
+      api<Issue>("/api/issues", { method: "POST", body: JSON.stringify(input) }),
+    update: (ref, patch) =>
+      api<Issue>(`/api/issues/${encodeURIComponent(ref)}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    archive: (ref) =>
+      api<Issue>(`/api/issues/${encodeURIComponent(ref)}/archive`, { method: "POST" }),
+    restore: (ref) =>
+      api<Issue>(`/api/issues/${encodeURIComponent(ref)}/restore`, { method: "POST" }),
+  };
+
+  return { risks, changes, projects, config, reference, issues };
 }

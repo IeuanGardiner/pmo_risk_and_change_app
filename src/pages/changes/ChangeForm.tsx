@@ -58,6 +58,7 @@ function toInput(f: FormState): ChangeInput {
     scheduleImpactDays: parseNum(f.scheduleImpactDays),
     projectId: isProject ? f.projectId || null : null,
     linkedRiskRefs: f.linkedRiskRefs,
+    linkedIssueRefs: [],
     impactAreas: f.impactAreas,
     plannedImplementationDate: f.plannedImplementationDate || null,
     requiredBy: f.requiredBy || null,

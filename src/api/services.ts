@@ -4,6 +4,8 @@ import type {
   ChangeInput,
   ChangeRequest,
   ChangeTransitionAction,
+  Issue,
+  IssueInput,
   Project,
   ProjectInput,
   Risk,
@@ -83,10 +85,21 @@ export interface ReferenceService {
   currentUser(): Promise<AppUser>;
 }
 
+export interface IssueService {
+  /** All issues, including archived ones. */
+  list(): Promise<Issue[]>;
+  get(ref: string): Promise<Issue | null>;
+  create(input: IssueInput): Promise<Issue>;
+  update(ref: string, patch: Partial<IssueInput>): Promise<Issue>;
+  archive(ref: string): Promise<Issue>;
+  restore(ref: string): Promise<Issue>;
+}
+
 export interface Services {
   risks: RiskService;
   changes: ChangeService;
   projects: ProjectService;
   config: ConfigService;
   reference: ReferenceService;
+  issues: IssueService;
 }

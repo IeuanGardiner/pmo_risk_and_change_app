@@ -1,6 +1,7 @@
 import type {
   ChangePriority,
   ChangeStatus,
+  IssueStatus,
   Rating,
   RiskAction,
   RiskActionStatus,
@@ -97,3 +98,8 @@ export const CHANGE_STATUSES: ChangeStatus[] = [
   "Rejected",
   "Implemented",
 ];
+
+/* ---- Issue lookups ------------------------------------------------------- */
+export const ISSUE_STATUSES: IssueStatus[] = ["Open", "In Progress", "Closed"];
+/** Issue priority reuses ChangePriority — aliased here for register sort accessors. */
+export const ISSUE_PRIORITIES: ChangePriority[] = CHANGE_PRIORITIES;
