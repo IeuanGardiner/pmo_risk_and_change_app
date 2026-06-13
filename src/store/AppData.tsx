@@ -105,7 +105,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // two overlapping mutations whose refetches interleave).
   const refreshRisksSeq = useRef(0);
   const refreshChangesSeq = useRef(0);
-  const refreshIssuesSeq = useRef(0);
   // Ref kept in sync with `changes` state so stable callbacks can read current
   // values without declaring `changes` as a dependency.
   const changesRef = useRef(changes);
@@ -185,11 +184,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (seq === refreshChangesSeq.current) setChanges(list);
   }, []);
 
-  const refreshIssues = useCallback(async () => {
-    const seq = ++refreshIssuesSeq.current;
-    const list = await services.issues.list();
-    if (seq === refreshIssuesSeq.current) setIssues(list);
-  }, []);
 
   // Stable mutation callbacks extracted so consumers don't re-render on
   // unrelated state changes.
