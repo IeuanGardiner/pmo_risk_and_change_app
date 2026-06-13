@@ -40,7 +40,7 @@ const ACTIONS_BY_STATUS: Record<string, { action: ChangeTransitionAction; label:
 export function ChangeDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
-  const { changes, risks, projects, transitionChange, deleteChange } = useAppData();
+  const { changes, risks, issues, projects, transitionChange, deleteChange } = useAppData();
   const chartColors = useTheme().chartColors;
   const { can } = useAuth();
   const toast = useToast();
@@ -49,7 +49,6 @@ export function ChangeDetail() {
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-
   const change = changes.find((c) => c.changeReference === ref);
   usePageTitle(change ? `Change ${change.changeReference}` : "Change not found");
 
@@ -347,6 +346,49 @@ export function ChangeDetail() {
                   <Pill level={r.level} small />
                 </div>
               ))
+            )}
+          </Card>
+          <Card style={{ padding: 18 }}>
+            <SectionTitle sub="Issues raised against this change">Linked Issues</SectionTitle>
+            {change.linkedIssueRefs.length === 0 ? (
+              <div style={{ fontSize: 13, color: T.textTer }}>No linked issues.</div>
+            ) : (
+              issues
+                .filter((i) => change.linkedIssueRefs.includes(i.issueReference))
+                .map((i) => (
+                  <div
+                    key={i.issueReference}
+                    className="rs-row"
+                    onClick={() => navigate(`/issues/${i.issueReference}`)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "9px 4px",
+                      borderTop: `1px solid ${T.strokeSubtle}`,
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    <span style={{ color: T.textTer, fontWeight: 600 }}>{i.issueReference}</span>
+                    <span style={{ fontWeight: 600, color: T.text, flex: 1 }}>{i.title}</span>
+                    <span style={{ color: T.textSec }}>{money(i.estimatedCost)}</span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: T.textSec,
+                        background: T.bg,
+                        border: `1px solid ${T.stroke}`,
+                        borderRadius: 4,
+                        padding: "1px 7px",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {i.status}
+                    </span>
+                  </div>
+                ))
             )}
           </Card>
 

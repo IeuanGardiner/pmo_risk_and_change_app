@@ -100,10 +100,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [user, setUser] = useState<AppUser | null>(null);
-  // Monotonic counter — incremented before each refreshRisks call so that only
+  // Monotonic counters — incremented before each side-effect refetch so that only
   // the response matching the most recent request updates state (guards against
-  // two overlapping mutations whose risk refetches interleave).
+  // two overlapping mutations whose refetches interleave).
   const refreshRisksSeq = useRef(0);
+  const refreshChangesSeq = useRef(0);
   const refreshIssuesSeq = useRef(0);
   // Ref kept in sync with `changes` state so stable callbacks can read current
   // values without declaring `changes` as a dependency.
@@ -177,7 +178,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (seq === refreshRisksSeq.current) setRisks(list);
   }, []);
 
-  /** Issue links are bidirectional; refetch risks+changes so all sides agree. */
+  /** Risk/change↔issue links are bidirectional; refetch changes so both sides agree. */
+  const refreshChanges = useCallback(async () => {
+    const seq = ++refreshChangesSeq.current;
+    const list = await services.changes.list();
+    if (seq === refreshChangesSeq.current) setChanges(list);
+  }, []);
+
   const refreshIssues = useCallback(async () => {
     const seq = ++refreshIssuesSeq.current;
     const list = await services.issues.list();
@@ -323,17 +330,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const rec = await services.issues.create(input);
     upsertIssue(rec);
     if (input.linkedRiskRefs.length) await refreshRisks();
-    if (input.linkedChangeRefs.length) await refreshIssues();
+    if (input.linkedChangeRefs.length) await refreshChanges();
     return rec;
-  }, [upsertIssue, refreshRisks, refreshIssues]);
+  }, [upsertIssue, refreshRisks, refreshChanges]);
 
   const updateIssue = useCallback(async (ref: string, patch: Partial<IssueInput>): Promise<Issue> => {
     const rec = await services.issues.update(ref, patch);
     upsertIssue(rec);
     if (patch.linkedRiskRefs) await refreshRisks();
-    if (patch.linkedChangeRefs) await refreshIssues();
+    if (patch.linkedChangeRefs) await refreshChanges();
     return rec;
-  }, [upsertIssue, refreshRisks, refreshIssues]);
+  }, [upsertIssue, refreshRisks, refreshChanges]);
 
   const archiveIssue = useCallback(async (ref: string): Promise<Issue> => {
     const rec = await services.issues.archive(ref);

@@ -649,7 +649,11 @@ export function EditRisk() {
     }
     setSaving(true);
     try {
-      await updateRisk(risk.riskReference, toInput(f));
+      await updateRisk(risk.riskReference, {
+        ...toInput(f),
+        linkedChangeRefs: risk.linkedChangeRefs,
+        linkedIssueRefs: risk.linkedIssueRefs,
+      });
       toast.success(`Risk ${risk.riskReference} updated`);
       navigate(`/risks/${risk.riskReference}`);
     } catch (e) {
