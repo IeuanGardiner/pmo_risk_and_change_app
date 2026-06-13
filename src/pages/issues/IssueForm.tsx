@@ -9,7 +9,7 @@ import { useToast } from "../../components/Toast";
 import { useAppData } from "../../store/AppData";
 import { T } from "../../theme/tokens";
 import type { ChangeRequest, ChangePriority, IssueInput, IssueStatus, Risk, Scope } from "../../types/domain";
-import { CHANGE_PRIORITIES, ISSUE_STATUSES } from "../../types/lookups";
+import { ISSUE_PRIORITIES, ISSUE_STATUSES } from "../../types/lookups";
 import { currencySymbol, parseNum } from "../../utils/format";
 
 interface FormState {
@@ -232,7 +232,7 @@ function IssueInfoFields({
           <Select
             value={f.priority}
             onChange={(v) => set("priority", v as ChangePriority)}
-            options={CHANGE_PRIORITIES}
+            options={ISSUE_PRIORITIES}
           />
         </Field>
         <Field label="Raised By" required error={infoErr("raisedBy")}>

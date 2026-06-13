@@ -612,7 +612,10 @@ export function EditChange() {
     }
     setSaving(true);
     try {
-      await updateChange(change.changeReference, toInput(f));
+      await updateChange(change.changeReference, {
+        ...toInput(f),
+        linkedIssueRefs: change.linkedIssueRefs,
+      });
       toast.success(`Change ${change.changeReference} updated`);
       navigate(`/changes/${change.changeReference}`);
     } catch (e) {

@@ -319,10 +319,10 @@ export function IssueRegister() {
                   <tr
                     key={i.issueReference}
                     className="rs-row"
-                    onClick={() => !i.archived && navigate(`/issues/${i.issueReference}`)}
+                    onClick={() => navigate(`/issues/${i.issueReference}`)}
                     style={{
                       borderTop: `1px solid ${T.strokeSubtle}`,
-                      cursor: i.archived ? "default" : "pointer",
+                      cursor: "pointer",
                       opacity: i.archived ? 0.55 : 1,
                     }}
                   >
@@ -331,7 +331,7 @@ export function IssueRegister() {
                     </td>
                     <td style={{ padding: "11px 14px" }}>
                       <div style={{ fontWeight: 600, color: T.text }}>{i.title}</div>
-                      <div style={{ fontSize: 11, color: T.textTer }}>{i.category}</div>
+                      <div style={{ fontSize: 11, color: T.textTer }}>{i.scope}</div>
                     </td>
                     <td style={{ padding: "11px 14px", color: T.textSec }}>{i.category}</td>
                     <td style={{ padding: "11px 14px" }}>
