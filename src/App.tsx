@@ -95,18 +95,22 @@ function Shell() {
 
   return (
     <ThemeProvider branding={config.branding}>
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        fontFamily: T.font,
-        background: T.bg,
-        color: T.text,
-        fontSize: 14,
-      }}
-    >
       <Sidebar searchRef={searchRef} />
-      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div
+        className="rs-shell-content"
+        style={{
+          display: "flex",
+          height: "100vh",
+          marginLeft: "var(--sidebar-w)",
+          transition: "margin-left var(--sidebar-motion-duration, 300ms) cubic-bezier(0.16, 1, 0.3, 1)",
+          fontFamily: T.font,
+          background: T.bg,
+          color: T.text,
+          fontSize: 14,
+          overflow: "hidden",
+          flexDirection: "column",
+        }}
+      >
         <div style={{ flex: 1, overflow: "auto" }}>
           {/* Keyed by pathname so navigating away from a crashed view recovers. */}
           <ErrorBoundary key={location.pathname}>
@@ -144,7 +148,6 @@ function Shell() {
           </ErrorBoundary>
         </div>
       </div>
-    </div>
     </ThemeProvider>
   );
 }
