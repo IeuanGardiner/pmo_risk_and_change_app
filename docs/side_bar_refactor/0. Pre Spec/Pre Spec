@@ -1,0 +1,98 @@
+# Pre-Spec: Collapsible Sidebar — RiskShield
+
+> **Status:** Pre-spec (consolidated from issues #15, #16, #17, #18)
+> **Next step:** Full spec document
+
+---
+
+## Overview
+
+Redesign the sidebar into a collapsible, frosted-glass component. This covers the full scope of work: refactoring the existing component, implementing the collapsible behaviour, accessibility polish, and QA sign-off.
+
+---
+
+## Goals
+
+- Clean up the existing `Sidebar.tsx` (tokens, inline styles, magic strings) so it is ready for feature work.
+- Add a collapsible mode: icons-only bubble with frosted glass effect when collapsed, full nav when expanded.
+- Persist the user's preference across sessions.
+- Ensure the component is fully accessible and respects `prefers-reduced-motion`.
+
+---
+
+## Scope
+
+### 1 — Refactor (pre-condition)
+
+> *File: `src/components/layout/Sidebar.tsx`*
+
+- Replace all hardcoded colour literals (e.g. `"#fff"`) with design tokens (`T.sidebarText`, `T.textTer`, etc.).
+- Extract repeated inline style objects into named constants or small factory functions.
+- Move the keyboard shortcuts array into a named constant.
+
+### 2 — Collapsible behaviour
+
+> *File: `src/components/layout/Sidebar.tsx`*
+
+- Add `isCollapsed` state; persist to `localStorage` under key `sidebarCollapsed`.
+- **Collapsed:** 90 px wide, icons-only, frosted glass island (`backdrop-filter: blur(10px)`, `var(--shadow-8)`).
+- **Expanded:** 260 px wide, full nav with labels, search, portfolio summary, and keyboard shortcuts.
+- Smooth width + label-opacity transitions using CSS motion tokens / easing.
+- Hide search, portfolio summary, and keyboard shortcuts hints when collapsed.
+- Expose an expand/collapse toggle button with a descriptive `aria-label`.
+
+### 3 — Accessibility & reduced-motion polish
+
+> *Files: `src/components/layout/Sidebar.tsx`, `src/index.css` (if needed)*
+
+- Collapsed nav items must expose their labels programmatically (`title` attribute, or equivalent) for tooltips and screen readers.
+- All interactive elements must have appropriate `aria-*` attributes.
+- Keyboard focus styles must be visible for nav items and the toggle button.
+- All transitions and animations must be disabled when `prefers-reduced-motion: reduce` is active.
+- Keyboard-only navigation must be able to expand/collapse the sidebar and traverse all nav links.
+
+### 4 — QA checklist
+
+Before the feature PR is merged, confirm:
+
+- [ ] `npm run typecheck` passes with 0 errors.
+- [ ] `npm run build` succeeds.
+- [ ] Cold-load: theme and branding render without flash.
+- [ ] Collapsed → expanded toggle works; preference persists after reload.
+- [ ] Nav items navigate to the correct pages; active state highlights correctly.
+- [ ] Search is hidden when collapsed and visible when expanded.
+- [ ] Keyboard shortcuts hint only appears on pointer-fine devices.
+- [ ] Theme toggle still works in both states.
+- [ ] No console errors or warnings in the browser.
+- [ ] Screenshots (expanded and collapsed) attached to the PR.
+
+---
+
+## Acceptance Criteria
+
+- Collapsed/expanded toggle works and preference persists across reloads.
+- No regressions to navigation or permission gating.
+- `npm run typecheck` and `npm run build` pass with 0 errors.
+- Toggle has `aria-label`; collapsed nav items expose labels via `title` for screen readers.
+- Transitions are suppressed under `prefers-reduced-motion: reduce`.
+
+---
+
+## Rough Estimates
+
+| Area | Estimate |
+|---|---|
+| Refactor (tokens, styles, constants) | 30–60 min |
+| Collapsible feature | 1–2 hrs |
+| Accessibility & reduced-motion | 30–45 min |
+| QA | 15–30 min |
+| **Total** | **~3–4 hrs** |
+
+---
+
+## Open Questions
+
+- Should the collapsed width (90 px) be a design token, or is it hardcoded acceptable for now?
+- Does the frosted glass effect need a fallback for browsers that don't support `backdrop-filter`?
+- Should collapsed state be per-user (server-persisted) in future, or is `localStorage` the long-term solution?
+- Is there a Figma design to reference, or is this implementation-led?
