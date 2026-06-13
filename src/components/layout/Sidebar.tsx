@@ -1,4 +1,5 @@
 import {
+  AlertCircle,
   ClipboardList,
   FileBarChart,
   FolderKanban,
@@ -55,6 +56,13 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
+    label: "Issue",
+    items: [
+      { to: "/issues", label: "Issue Register", icon: AlertCircle, end: true, permission: "risks:read" },
+      { to: "/issues/new", label: "Raise Issue", icon: PlusCircle, end: true, permission: "risks:update" },
+    ],
+  },
+  {
     label: "General",
     items: [
       { to: "/projects", label: "Projects", icon: FolderKanban, end: true, permission: "projects:manage" },
@@ -72,7 +80,7 @@ const NAV_SECTIONS: { label: string; items: NavItem[] }[] = [
 ];
 
 export function Sidebar({ searchRef }: { searchRef?: RefObject<GlobalSearchHandle | null> }) {
-  const { activeProjects, activeRisks, changes, config } = useAppData();
+  const { activeProjects, activeRisks, activeIssues, changes, config } = useAppData();
   const { session, user, can, signOut } = useAuth();
   const { scheme, toggle } = useTheme();
   const { appName, tagline, logoUrl } = config.branding;
@@ -206,7 +214,8 @@ export function Sidebar({ searchRef }: { searchRef?: RefObject<GlobalSearchHandl
         <div style={{ fontSize: 11.5, color: T.textTer }}>
           {activeRisks.filter((r) => r.status !== "Closed").length} open risks ·{" "}
           {changes.filter((c) => c.status !== "Implemented" && c.status !== "Rejected").length}{" "}
-          live changes
+          live changes ·{" "}
+          {activeIssues.filter((i) => i.status !== "Closed").length} open issues
         </div>
       </div>
 

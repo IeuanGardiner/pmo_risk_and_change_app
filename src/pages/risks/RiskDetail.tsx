@@ -31,7 +31,7 @@ import { RiskUpdateDialog } from "./RiskUpdateDialog";
 export function RiskDetail() {
   const { ref } = useParams<{ ref: string }>();
   const navigate = useNavigate();
-  const { risks, changes, projects, config, closeRisk, archiveRisk, restoreRisk } = useAppData();
+  const { risks, changes, issues, projects, config, closeRisk, archiveRisk, restoreRisk } = useAppData();
   const chartColors = useTheme().chartColors;
   const { can } = useAuth();
   const toast = useToast();
@@ -345,6 +345,49 @@ export function RiskDetail() {
                   <ChangeStatusPill status={c.status} small />
                 </div>
               ))
+            )}
+          </Card>
+          <Card style={{ padding: 18 }}>
+            <SectionTitle sub="Issues raised against this risk">Linked Issues</SectionTitle>
+            {risk.linkedIssueRefs.length === 0 ? (
+              <div style={{ fontSize: 13, color: T.textTer }}>No linked issues.</div>
+            ) : (
+              issues
+                .filter((i) => risk.linkedIssueRefs.includes(i.issueReference))
+                .map((i) => (
+                  <div
+                    key={i.issueReference}
+                    className="rs-row"
+                    onClick={() => navigate(`/issues/${i.issueReference}`)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "9px 4px",
+                      borderTop: `1px solid ${T.strokeSubtle}`,
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    <span style={{ color: T.textTer, fontWeight: 600 }}>{i.issueReference}</span>
+                    <span style={{ fontWeight: 600, color: T.text, flex: 1 }}>{i.title}</span>
+                    <span style={{ color: T.textSec }}>{money(i.estimatedCost)}</span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: T.textSec,
+                        background: T.bg,
+                        border: `1px solid ${T.stroke}`,
+                        borderRadius: 4,
+                        padding: "1px 7px",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {i.status}
+                    </span>
+                  </div>
+                ))
             )}
           </Card>
         </div>

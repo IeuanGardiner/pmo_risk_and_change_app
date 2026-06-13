@@ -13,7 +13,7 @@ import { BrandingEditor } from "./BrandingEditor";
 import { LookupListEditor } from "./LookupListEditor";
 
 export function SettingsPage() {
-  const { risks, changes, projects, config, updateConfig, user } = useAppData();
+  const { risks, changes, issues, projects, config, updateConfig, user } = useAppData();
   const { can } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
@@ -39,6 +39,7 @@ export function SettingsPage() {
     changeImpactArea: (v: string) => changes.filter((c) => c.impactAreas.includes(v)).length,
     riskStatus: (v: string) => risks.filter((r) => r.status === v).length,
     projectType: (v: string) => projects.filter((p) => p.type === v).length,
+    issueCategory: (v: string) => issues.filter((i) => i.category === v).length,
   };
 
   const save = async () => {
@@ -257,6 +258,15 @@ export function SettingsPage() {
             values={draft.projectTypes}
             usageCount={usage.projectType}
             onChange={(v) => setPart("projectTypes", v)}
+          />
+        </Card>
+        <Card style={{ padding: 18 }}>
+          <LookupListEditor
+            title="Issue categories"
+            sub="Categories offered when raising issues"
+            values={draft.issueCategories}
+            usageCount={usage.issueCategory}
+            onChange={(v) => setPart("issueCategories", v)}
           />
         </Card>
       </div>
