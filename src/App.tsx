@@ -61,6 +61,18 @@ const UsersPage = lazy(() =>
 const RolesPage = lazy(() =>
   import("./pages/admin/RolesPage").then((m) => ({ default: m.RolesPage })),
 );
+const IssueRegister = lazy(() =>
+  import("./pages/issues/IssueRegister").then((m) => ({ default: m.IssueRegister })),
+);
+const IssueDetail = lazy(() =>
+  import("./pages/issues/IssueDetail").then((m) => ({ default: m.IssueDetail })),
+);
+const AddIssue = lazy(() =>
+  import("./pages/issues/IssueForm").then((m) => ({ default: m.AddIssue })),
+);
+const EditIssue = lazy(() =>
+  import("./pages/issues/IssueForm").then((m) => ({ default: m.EditIssue })),
+);
 
 function Shell() {
   const { loading, error, refresh, config } = useAppData();
@@ -117,6 +129,10 @@ function Shell() {
                 path="/changes/:ref/edit"
                 element={guarded("changes:update", <EditChange />)}
               />
+              <Route path="/issues" element={guarded("risks:read", <IssueRegister />)} />
+              <Route path="/issues/new" element={guarded("risks:update", <AddIssue />)} />
+              <Route path="/issues/:ref" element={guarded("risks:read", <IssueDetail />)} />
+              <Route path="/issues/:ref/edit" element={guarded("risks:update", <EditIssue />)} />
               <Route path="/projects" element={guarded("projects:manage", <ProjectsPage />)} />
               <Route path="/reports" element={guarded("reports:read", <Reports />)} />
               <Route path="/settings" element={guarded("settings:manage", <SettingsPage />)} />
